@@ -1,0 +1,12 @@
+artifacts/
+__pycache__/
+Bak/
+OutputDir/
+InputDir/
+test_data.py
+test.py
+*.csv
+RVsPy
+debug.txt
+draft.txt
+.DS_Store
