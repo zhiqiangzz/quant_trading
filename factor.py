@@ -21,7 +21,7 @@ class BaseProcessor(ABC):
 
     def _make_result_df(self, factor_col):
         df = self.dfs[0]
-        factor_col = [round(v, 3) for v in factor_col]
+        factor_col = [round(v, 6) for v in factor_col]
         return pd.DataFrame(
             {
                 "交易日期": df["交易日期"],
@@ -99,8 +99,8 @@ class BaseProcessor(ABC):
 
 
 class BaseProcessorWithParam(BaseProcessor):
-    def __init__(self, params=7, *params_extra):
-        self.params = [params] + list(params_extra)
+    def __init__(self, *params_extra):
+        self.params = list(params_extra)
         self.pop_idx = 0
         super().__init__()
 
@@ -185,8 +185,8 @@ class DLogVol(BaseProcessor):
 class ATR(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs
-        atr = ta.volatility.average_true_range(
-            df["最高价"], df["最低价"], df["收盘价"], window=self._pop_param()
+        atr = talib.ATR(
+            df["最高价"], df["最低价"], df["收盘价"], timeperiod=self._pop_param()
         )
 
         ATRx = np.maximum(atr, 1e-8)
@@ -206,13 +206,14 @@ class DEVLogVol(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs
         logVol = np.log1p(df["成交量"])
-        return logVol - logVol.ewm(span=self._pop_param(), adjust=False).mean()
+        return logVol - talib.EMA(logVol, timeperiod=self._pop_param())
 
 
 class EMA(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs
-        return df["收盘价"].ewm(span=self._pop_param(), adjust=False).mean()
+        ema_x = talib.EMA(df["收盘价"], timeperiod=self._pop_param())
+        return ema_x
 
 
 class DEVEma(BaseProcessorWithParam):
@@ -240,12 +241,13 @@ class Spread(BaseProcessorWithParam):
 class DEVEmaQuantile(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs
-        return (
+        res = (
             df[f"DEVEma_7"]
-            .rolling(window=self._pop_param(), min_periods=1)
-            .apply(lambda x: np.quantile(x, self._get_param() / 100))
+            .rolling(window=self._pop_param(), min_periods=20)
+            .apply(lambda x: np.quantile(x.dropna(), self._get_param() / 100))
             .shift(1)
         )
+        return res
 
 
 class NumEffectiveDays(BaseProcessorWithParam):
@@ -253,7 +255,7 @@ class NumEffectiveDays(BaseProcessorWithParam):
         (df,) = self.dfs
         num_effective_days = (
             df[f"DEVEma_7"]
-            .rolling(window=self._get_param(), min_periods=1)
+            .rolling(window=self._get_param(), min_periods=20)
             .apply(lambda x: np.sum(~np.isnan(x)) >= self._get_param())
             .shift(1)
         )
@@ -285,38 +287,6 @@ class LoEvent(BaseProcessor):
 #       macd_cross_event = as.integer(sign(MACD_hist) != sign(lag(MACD_hist)) &  # 事件
 #                                       !is.na(MACD_hist) & !is.na(lag(MACD_hist)))
 #     )
-
-
-def DEMA(span):
-    def func(_, factor_var):
-        # 第一次 EMA
-        ema1 = factor_var["结算价"].ewm(span=span, adjust=False).mean()
-        # 第二次 EMA（对 ema1 再做一次 EMA）
-        ema2 = ema1.ewm(span=span, adjust=False).mean()
-        # DEMA 公式
-        return 2 * ema1 - ema2
-
-    return func
-
-
-def Beta():
-    def func(var, factor_var):
-        var["ret"] = np.log(var["结算价"] / var["结算价"].shift(1))
-        factor_var["mret"] = np.log(
-            factor_var["结算价"] / factor_var["结算价"].shift(1)
-        )
-
-        df = pd.merge(
-            var[["交易日期", "ret"]], factor_var[["交易日期", "mret"]], on="交易日期"
-        ).dropna()
-
-        X = sm.add_constant(df["mret"])
-        model = sm.OLS(df["ret"], X).fit()
-        beta = model.params["mret"]
-
-        return df["ret"] - beta * df["mret"]
-
-    return func
 
 
 def BasisReturn():
@@ -421,14 +391,6 @@ def KdaysOpenInterest(kdays: int):
     return func
 
 
-def KdaysTradingVolumeRelativeOffset(kdays: int):
-    def func(_, factor_var):
-        EMAK = np.log(factor_var["成交量"]).ewm(span=kdays, adjust=False).mean()
-        return (np.log(factor_var["成交量"]) - EMAK.shift(1)).shift(1)
-
-    return func
-
-
 class Basis(BaseProcessor):
     def compute(self):
         _, basis_df = self.dfs
@@ -438,7 +400,7 @@ class Basis(BaseProcessor):
 class BasisRate(BaseProcessor):
     def compute(self):
         _, basis_df = self.dfs
-        return basis_df["基差率"].shift(1)
+        return basis_df["基差率"]
 
 
 def ProfitMargin():
@@ -611,7 +573,7 @@ class d_HV(BaseProcessor):
 
 def ChaikinVolatilityHelper(high, low, period=10):
     hl_range = high - low
-    ema_hl = hl_range.ewm(span=period, adjust=False).mean()
+    ema_hl = talib.EMA(hl_range, timeperiod=period)
     chaikin_vol = (ema_hl - ema_hl.shift(period)) / ema_hl.shift(period)
     return chaikin_vol
 
@@ -630,7 +592,7 @@ class OBVFlow(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs
         obv = ta.volume.on_balance_volume(df["收盘价"], df["成交量"])
-        vol_ema7 = df["成交量"].ewm(span=self._pop_param(), adjust=False).mean()
+        vol_ema7 = talib.EMA(df["成交量"], timeperiod=self._pop_param())
         return (obv - obv.shift(1)) / np.maximum(vol_ema7, 1e-8)
 
 
@@ -668,26 +630,43 @@ class UpDownNext(BaseProcessor):
         return np.where(df["ROCNext"] > 0, 1, 0)
 
 
-class RelativeToSettle(AggregateProcessor):
+class RelativeToPred(AggregateProcessor):
     def compute(self):
         (df,) = self.dfs
         return (
             df.groupby("交易日期")
             .apply(
                 lambda x: (
-                    x["结算价"] - x.loc[x["IsMain"] == 1, "结算价"].iloc[0]
-                    if (x["IsMain"] == 1).any()
-                    else np.nan
+                    x["结算价"] - x.loc[x["IsPredicted"] == 1, "结算价"].iloc[0]
+                    if (x["IsPredicted"] == 1).any()
+                    else pd.Series([np.nan] * len(x), index=x.index)
                 )
             )
             .reset_index(level=0, drop=True)
         )
 
 
+class RelativeToMainLogDiff(AggregateProcessor):
+    def compute(self):
+        (df,) = self.dfs
+        RelativeToMainDiff = (
+            np.log(
+                df.groupby("交易日期")
+                .apply(lambda x: (x.loc[x["IsMain"] == 1, "结算价"].iloc[0]))
+                .clip(lower=1e-12)
+            )
+            .diff()
+            .rename("RelativeToMainDiff")
+        )
+        return df.merge(RelativeToMainDiff, on="交易日期", how="left")[
+            "RelativeToMainDiff"
+        ]
+
+
 class DiffAbsAtr(AggregateProcessor):
     def compute(self):
         (df,) = self.dfs
-        return np.abs(df["RelativeToSettle"] / np.maximum(df["ATR_14"], 1e-8))
+        return np.abs(df["RelativeToPred"] / np.maximum(df["ATR_14"], 1e-8))
 
 
 class LastDayClosePrice(BaseProcessor):
@@ -704,6 +683,38 @@ class OISum(AggregateProcessor):
         )
 
         return df.merge(OISum, on="交易日期", how="left")["OISum"]
+
+
+class AggAtr(AggregateProcessor):
+    def compute(self):
+        (df,) = self.dfs
+
+        df["TR"] = df.apply(
+            lambda row: max(
+                [
+                    row["最高价"] - row["最低价"],
+                    abs(row["最高价"] - row["前收盘价"]),
+                    abs(row["最低价"] - row["前收盘价"]),
+                ],
+                default=np.nan,
+            ),
+            axis=1,
+        )
+
+        def weighted_mean(group):
+            w = group["成交量"]
+            v = group["TR"]
+            if w.isna().all() or w.sum() <= 0:
+                return v.mean()
+            else:
+                return np.average(v, weights=w)
+
+        TR_agg = (
+            df.groupby("交易日期").apply(lambda x: weighted_mean(x)).rename("AggATR14")
+        )
+        AggATR14 = TR_agg.rolling(window=14, min_periods=1).mean()
+
+        return df.merge(AggATR14, on="交易日期", how="left")["AggATR14"]
 
 
 class TopNet(AggregateProcessorWithParam):
@@ -750,25 +761,86 @@ class SkewTop(AggregateProcessorWithParam):
         )
 
 
-# TR = df.apply(
-#     lambda row: max(
-#         [
-#             row["最高价"] - row["最低价"],
-#             abs(row["最高价"] - row["收盘价"].shift(1)),
-#             abs(row["最低价"] - row["收盘价"].shift(1)),
-#         ],
-#         default=np.nan,
-#     ),
-#     axis=1,
-# )
+class DNetAtrTop(AggregateProcessorWithParam):
+    def compute(self):
+        df, _ = self.dfs
+        topN = self._pop_param()
+        lagging = self._pop_param()
+        topN_name = f"TopNetMean_{topN}"
+        tmp = df.groupby("交易日期").apply(
+            lambda x: pd.Series(
+                {
+                    topN_name: x[f"TopNet_{topN}"].mean(),
+                    "AggAtrMean": x["AggAtr"].mean(),
+                }
+            )
+        )
 
-# def weighted_mean(group):
-#     w = group["成交量"]
-#     v = group["TR"]
-#     if w.isna().all() or w.sum() <= 0:
-#         return v.mean()
-#     else:
-#         return np.average(v, weights=w)
+        result = (
+            ((tmp[topN_name] - tmp[topN_name].shift(lagging)) / tmp["AggAtrMean"])
+            .where(tmp["AggAtrMean"] > 0)
+            .rename("DNetAtrTop")
+        )
 
-# TR_agg = TR.groupby("交易日期").apply(lambda x: weighted_mean(x))
-# ATR14 = TR_agg.rolling(window=14, min_periods=1).mean()
+        return df.merge(result, on="交易日期", how="left")["DNetAtrTop"]
+
+
+class LogReturnStockIndex(AggregateProcessorWithParam):
+    def compute(self):
+        (df, df_stock_index) = self.dfs
+        lagging = self._pop_param()
+        df_stock_index["stock_index_lagging_log_return"] = (
+            np.log(df_stock_index["开盘价"].clip(lower=1e-12)).diff().shift(lagging)
+        )
+        return df.merge(df_stock_index, on="交易日期", how="left")[
+            "stock_index_lagging_log_return"
+        ]
+
+
+class Beta(AggregateProcessorWithParam):
+    def compute(self):
+        df, _ = self.dfs
+        beta_window = self._pop_param()
+        beta_min_window = self._pop_param()
+        category = self._pop_param()
+
+        tmp = df.groupby("交易日期").apply(
+            lambda x: pd.Series(
+                {
+                    "RelativeToMainLogDiff": x["RelativeToMainLogDiff"].mean(),
+                    f"LogReturnStockIndex_0_{category}": x[
+                        f"LogReturnStockIndex_0_{category}"
+                    ].mean(),
+                }
+            )
+        )
+
+        rF = tmp["RelativeToMainLogDiff"].astype(float)
+        rX = tmp[f"LogReturnStockIndex_0_{category}"].astype(float)
+
+        var_x = rX.rolling(beta_window, min_periods=beta_min_window).apply(
+            lambda x: x.dropna().var()
+        )
+
+        paired = rF.to_frame("f").join(rX.to_frame("x"))
+        cov_fx = (
+            paired.rolling(beta_window, min_periods=beta_min_window)
+            .cov()
+            .xs("f", level=1)["x"]
+        )
+
+        beta = cov_fx / var_x
+        tmp["Beta"] = beta
+
+        return df.merge(tmp, on="交易日期", how="left")["Beta"]
+
+
+class ExRet60(BaseProcessorWithParam):
+    def compute(self):
+        df, _ = self.dfs
+        category = self._pop_param()
+        beta_sector = df[f"Beta_60_40_{category}"]
+        return (
+            df["RelativeToMainLogDiff"]
+            - beta_sector * df[f"LogReturnStockIndex_0_{category}"]
+        ).shift(1)

@@ -15,86 +15,93 @@ import talib
 import model
 from abc import ABC, abstractmethod
 from factor import *
+import global_var
 
 CONFIG = {
     "index": {
         "correlation": {
             "files": {
                 "碳酸锂": ["商品关联指数/电池931719.CSI.xlsx"],
-                "工业硅": ["商品关联指数/光伏931151.CSI.xlsx"],
-                "沪镍": ["商品关联指数/有色801050.SI.xlsx"],
-                "沪锡": ["商品关联指数/有色801050.SI.xlsx"],
-                "沪铜": ["商品关联指数/有色801050.SI.xlsx"],
-                "沪银": ["商品关联指数/贵金属801053.SI.xlsx"],
-                "螺纹钢": ["商品关联指数/钢铁801040.SI.xlsx"],
-                "氧化铝": ["商品关联指数/有色801050.SI.xlsx"],
-                "橡胶": ["商品关联指数/化工801030.SI.xlsx"],
-                "纯碱": ["商品关联指数/化工801030.SI.xlsx"],
-                "烧碱": ["商品关联指数/化工801030.SI.xlsx"],
-                "玻璃": [
-                    "商品关联指数/建筑材料801710.SI.xlsx",
-                ],
-                "甲醇": ["商品关联指数/化工801030.SI.xlsx"],
-                "精对苯二甲酸": [
-                    "商品关联指数/化学纤维801032.SI.xlsx",
-                ],
-                "铁矿石": [
-                    "商品关联指数/钢铁801040.SI.xlsx",
-                ],
-                "豆粕": ["商品关联指数/饲料801014.SI.xlsx"],
-                "棕榈油": [
-                    "商品关联指数/农产品801012.SI.xlsx",
-                ],
-                "焦煤": [
-                    "商品关联指数/煤炭000820.CSI.xlsx",
-                ],
+                # "工业硅": ["商品关联指数/光伏931151.CSI.xlsx"],
+                # "沪镍": ["商品关联指数/有色801050.SI.xlsx"],
+                # "沪锡": ["商品关联指数/有色801050.SI.xlsx"],
+                # "沪铜": ["商品关联指数/有色801050.SI.xlsx"],
+                # "沪银": ["商品关联指数/贵金属801053.SI.xlsx"],
+                # "螺纹钢": ["商品关联指数/钢铁801040.SI.xlsx"],
+                # "氧化铝": ["商品关联指数/有色801050.SI.xlsx"],
+                # "橡胶": ["商品关联指数/化工801030.SI.xlsx"],
+                # "纯碱": ["商品关联指数/化工801030.SI.xlsx"],
+                # "烧碱": ["商品关联指数/化工801030.SI.xlsx"],
+                # "玻璃": [
+                #     "商品关联指数/建筑材料801710.SI.xlsx",
+                # ],
+                # "甲醇": ["商品关联指数/化工801030.SI.xlsx"],
+                # "精对苯二甲酸": [
+                #     "商品关联指数/化学纤维801032.SI.xlsx",
+                # ],
+                # "铁矿石": [
+                #     "商品关联指数/钢铁801040.SI.xlsx",
+                # ],
+                # "豆粕": ["商品关联指数/饲料801014.SI.xlsx"],
+                # "棕榈油": [
+                #     "商品关联指数/农产品801012.SI.xlsx",
+                # ],
+                # "焦煤": [
+                #     "商品关联指数/煤炭000820.CSI.xlsx",
+                # ],
             },
-            "factors": {
-                # "LogReturnStockIndexLag1": (LogReturn(1)),
-                # "LogReturnStockIndexLag3": (LogReturn(3)),
-                # "LogReturnStockIndexLag5": (LogReturn(5)),
-                # "Beta": (Beta()),
-            },
+            "factors": [
+                # LogReturn(1),
+                LogReturnStockIndex(0, "correlation"),
+                LogReturnStockIndex(3, "correlation"),
+                Beta(60, 40, "correlation"),
+                ExRet60("correlation"),
+                # LogReturn(5),
+                # Beta(),
+            ],
         },
         "category": {
             "files": {
                 "碳酸锂": ["商品品类指数/化工CIFI.WI.xlsx"],
-                "工业硅": [
-                    "商品品类指数/南华新材料NHNMI.NHF.xlsx",
-                ],
-                "沪镍": ["商品品类指数/有色NFFI.WI.xlsx"],
-                "沪锡": ["商品品类指数/有色NFFI.WI.xlsx"],
-                "沪铜": ["商品品类指数/有色NFFI.WI.xlsx"],
-                "沪银": ["商品品类指数/贵金属NMFI.WI.xlsx"],
-                "螺纹钢": ["商品品类指数/煤焦钢矿JJRI.WI.xlsx"],
-                "氧化铝": ["商品品类指数/有色NFFI.WI.xlsx"],
-                "橡胶": ["商品品类指数/软商品SOFI.WI.xlsx"],
-                "纯碱": ["商品品类指数/化工CIFI.WI.xlsx"],
-                "烧碱": ["商品品类指数/化工CIFI.WI.xlsx"],
-                "玻璃": [
-                    "商品品类指数/非金属建材NMBM.WI.xlsx",
-                ],
-                "甲醇": ["商品品类指数/化工CIFI.WI.xlsx"],
-                "精对苯二甲酸": [
-                    "商品品类指数/化工CIFI.WI.xlsx",
-                ],
-                "铁矿石": [
-                    "商品品类指数/南华黑色原材料NHFMI.NHF.xlsx",
-                ],
-                "豆粕": ["商品品类指数/油脂油料OOFI.WI.xlsx"],
-                "棕榈油": [
-                    "商品品类指数/油脂油料OOFI.WI.xlsx",
-                ],
-                "焦煤": [
-                    "商品品类指数/煤焦钢矿JJRI.WI.xlsx",
-                ],
+                # "工业硅": [
+                #     "商品品类指数/南华新材料NHNMI.NHF.xlsx",
+                # ],
+                # "沪镍": ["商品品类指数/有色NFFI.WI.xlsx"],
+                # "沪锡": ["商品品类指数/有色NFFI.WI.xlsx"],
+                # "沪铜": ["商品品类指数/有色NFFI.WI.xlsx"],
+                # "沪银": ["商品品类指数/贵金属NMFI.WI.xlsx"],
+                # "螺纹钢": ["商品品类指数/煤焦钢矿JJRI.WI.xlsx"],
+                # "氧化铝": ["商品品类指数/有色NFFI.WI.xlsx"],
+                # "橡胶": ["商品品类指数/软商品SOFI.WI.xlsx"],
+                # "纯碱": ["商品品类指数/化工CIFI.WI.xlsx"],
+                # "烧碱": ["商品品类指数/化工CIFI.WI.xlsx"],
+                # "玻璃": [
+                #     "商品品类指数/非金属建材NMBM.WI.xlsx",
+                # ],
+                # "甲醇": ["商品品类指数/化工CIFI.WI.xlsx"],
+                # "精对苯二甲酸": [
+                #     "商品品类指数/化工CIFI.WI.xlsx",
+                # ],
+                # "铁矿石": [
+                #     "商品品类指数/南华黑色原材料NHFMI.NHF.xlsx",
+                # ],
+                # "豆粕": ["商品品类指数/油脂油料OOFI.WI.xlsx"],
+                # "棕榈油": [
+                #     "商品品类指数/油脂油料OOFI.WI.xlsx",
+                # ],
+                # "焦煤": [
+                #     "商品品类指数/煤焦钢矿JJRI.WI.xlsx",
+                # ],
             },
-            "factors": {
-                # "LogReturnStockIndexLag1": (LogReturn(1)),
-                # "LogReturnStockIndexLag3": (LogReturn(3)),
-                # "LogReturnStockIndexLag5": (LogReturn(5)),
-                # "Beta": (Beta()),
-            },
+            "factors": [
+                # LogReturn(1),
+                LogReturnStockIndex(0, "category"),
+                LogReturnStockIndex(3, "category"),
+                Beta(60, 40, "category"),
+                ExRet60("category"),
+                # LogReturn(5),
+                # Beta(),
+            ],
         },
     },
     "fundamentals": {
@@ -243,8 +250,12 @@ CONFIG = {
             "factors": [
                 TopNet(20),
                 TopTotal(20),
+                TopNet(5),
+                TopTotal(5),
                 DomTop(20),
                 SkewTop(20),
+                DNetAtrTop(5, 1),
+                DNetAtrTop(20, 5),
             ],
         },
     },
@@ -252,25 +263,25 @@ CONFIG = {
         "basic": {
             "files": {
                 "碳酸锂": ["基差/碳酸锂.xlsx"],
-                "工业硅": ["基差/工业硅.xlsx"],
-                "沪镍": ["基差/镍.xlsx"],
-                "沪锡": ["基差/沪锡.xlsx"],
-                "沪铜": ["基差/沪铜.xlsx"],
-                "沪银": ["基差/白银.xlsx"],
-                "螺纹钢": ["基差/螺纹.xlsx"],
-                "氧化铝": ["基差/氧化铝.xlsx"],
-                "橡胶": ["基差/橡胶.xlsx"],
-                "纯碱": ["基差/纯碱.xlsx"],
-                "烧碱": ["基差/烧碱.xlsx"],
-                "玻璃": ["基差/玻璃.xlsx"],
-                "甲醇": ["基差/甲醇.xlsx"],
-                "精对苯二甲酸": ["基差/PTA.xlsx"],
-                "铁矿石": ["基差/铁矿石.xlsx"],
-                "豆粕": ["基差/豆粕.xlsx"],
-                "棕榈油": ["基差/棕榈油.xlsx"],
-                "焦煤": ["基差/焦煤.xlsx"],
+                # "工业硅": ["基差/工业硅.xlsx"],
+                # "沪镍": ["基差/镍.xlsx"],
+                # "沪锡": ["基差/沪锡.xlsx"],
+                # "沪铜": ["基差/沪铜.xlsx"],
+                # "沪银": ["基差/白银.xlsx"],
+                # "螺纹钢": ["基差/螺纹.xlsx"],
+                # "氧化铝": ["基差/氧化铝.xlsx"],
+                # "橡胶": ["基差/橡胶.xlsx"],
+                # "纯碱": ["基差/纯碱.xlsx"],
+                # "烧碱": ["基差/烧碱.xlsx"],
+                # "玻璃": ["基差/玻璃.xlsx"],
+                # "甲醇": ["基差/甲醇.xlsx"],
+                # "精对苯二甲酸": ["基差/PTA.xlsx"],
+                # "铁矿石": ["基差/铁矿石.xlsx"],
+                # "豆粕": ["基差/豆粕.xlsx"],
+                # "棕榈油": ["基差/棕榈油.xlsx"],
+                # "焦煤": ["基差/焦煤.xlsx"],
             },
-            "factors": {"Basis": (Basis()), "BasisRate": (BasisRate())},
+            "factors": [BasisRate()],
         }
     },
     "technical": {
@@ -278,6 +289,7 @@ CONFIG = {
             "factors": [
                 LastDayClosePrice(),
                 OISum(),
+                AggAtr(),
                 ROC(0),
                 ROCNext(),
                 RGap(),
@@ -286,13 +298,13 @@ CONFIG = {
                 DLogVol(),
                 ATR(14),
                 ATRRelative(14),
-                DEVLogVol(),
-                EMA(),
+                DEVLogVol(7),
+                EMA(7),
                 EMA(12),
                 EMA(26),
                 EMA(9),
                 EMA(21),
-                DEVEma(),
+                DEVEma(7),
                 Slope(7, 14),
                 Spread(7, 21),
                 DEVEmaQuantile(60, 80),
@@ -324,8 +336,9 @@ CONFIG = {
                 RngMean(10),
                 DRngMean(),
                 UpDownNext(),
-                # RelativeToSettle(),
-                # DiffAbsAtr(),
+                RelativeToPred(),
+                RelativeToMainLogDiff(),
+                DiffAbsAtr(),
             ],
         },
     },
@@ -370,15 +383,6 @@ def factor_compute(func: BaseProcessor, var: pd.DataFrame, var_name: str, files:
             args[0] = contract
             dfs = [new_factor_cal_df]
             dfs = [df for df in dfs if not df.empty and not df.isna().all().all()]
-
-            # if func.name() == "ChaikinVolatility_10" and contract_name == "lc2406":
-            #     pd.DataFrame(
-            #         {
-            #             "最高价": contract["最高价"],
-            #             "最低价": contract["最低价"],
-            #             "收盘价": contract["收盘价"],
-            #         }
-            #     ).to_csv("debug.csv", index=False)
 
             new_factor_cal_df = pd.concat(
                 [new_factor_cal_df, func.run(args)], axis=0, ignore_index=True
@@ -457,85 +461,120 @@ def main():
     factor_mining = args.factor_mining
     model_training = args.model_training
 
-    major = utils.prepoccess_data(profit_var, only_keep_major=factor_mining)
-
     cut_off_date = pd.to_datetime("2025-01-03")
-    major = utils.filter_contracts(major, cut_off_date)
+
+    major = utils.prepoccess_data(
+        profit_var, only_keep_major=factor_mining, cut_off_date=cut_off_date
+    )
 
     grouped = major.groupby("品种名称")
 
     for var_name in args.vars:
         var_indices = grouped.groups[var_name]
-        var = major.loc[var_indices].copy().reset_index(drop=True)
-        # target_date = pd.to_datetime("2024-05-20").date()
-        # result = var[var["交易日期"] == target_date]
-        # print(result[["合约代码", "成交量", "IsMain"]])
-        for factor_category in args.factors:
-            for factor_subcategory_name, factor_subcategory in CONFIG[
-                factor_category
-            ].items():
-                for factor_func in factor_subcategory["factors"]:
-                    factor_name = factor_func.name()
-                    new_factor_cal_df = factor_compute(
-                        factor_func,
-                        var,
-                        var_name,
-                        factor_subcategory.get("files"),
-                    )
-                    identity = factor_name
-                    new_factor_cal_df = new_factor_cal_df.rename(
-                        columns={"factor_placeholder": identity}
-                    )
-                    var = pd.merge(
-                        var, new_factor_cal_df, on=["合约代码", "交易日期"], how="outer"
-                    )
+        var_all = major.loc[var_indices].copy().reset_index(drop=True)
+        var_all = var_all.sort_values(["交易日期", "合约代码"])
+        var_all.to_csv(f"InputDir/{var_name}_raw_df.csv", index=False)
 
-        if model_training:
-            var = var.dropna(
-                subset=var.columns.difference(["UpDownNext", "ROCNext"])
-            ).loc[~np.isinf(var["ROCNext"])]
-            var.drop(
-                columns=[
-                    "品种名称",
-                    "前结算价",
-                    "开盘价",
-                    "最高价",
-                    "最低价",
-                    "收盘价",
-                    "结算价",
-                    "涨跌",
-                    "涨跌1",
-                    "成交量",
-                    "持仓量",
-                    "持仓量变化",
-                    "成交额",
-                    "LastDayClosePrice",
-                    "OISum",
-                    "ATR_14",
-                    "EMA_7",
-                    "EMA_12",
-                    "EMA_26",
-                    "EMA_9",
-                    "EMA_21",
-                    "LoEvent",
-                    "BBandsUpper_20",
-                    "BBandsMiddle_20",
-                    "BBandsLower_20",
-                    "BBandsWidth",
-                    "BBandsBreakLow",
-                    "RSI_14",
-                    "RSILoEvent",
-                    "RngRel",
-                    "TopNet_20",
-                    "TopTotal_20",
-                    "ROCNext",
-                ],
-                inplace=True,
-            )
-            # var.to_csv(f"OutputDir/{var_name}_merged_df.csv", index=False)
-            # train model by var
-            # model.run_walkforward(var)
-            pass
+        for cut_off_date in [
+            pd.to_datetime("2025-01-03"),
+            pd.to_datetime("2025-01-06"),
+            pd.to_datetime("2025-01-07"),
+            pd.to_datetime("2025-01-08"),
+            pd.to_datetime("2025-01-09"),
+            pd.to_datetime("2025-01-13"),
+        ]:
+            var = utils.filter_contracts(var_all, cut_off_date)
+
+            for factor_category in args.factors:
+                for factor_subcategory_name, factor_subcategory in CONFIG[
+                    factor_category
+                ].items():
+                    for factor_func in factor_subcategory["factors"]:
+                        factor_name = factor_func.name()
+                        new_factor_cal_df = factor_compute(
+                            factor_func,
+                            var,
+                            var_name,
+                            factor_subcategory.get("files"),
+                        )
+                        identity = factor_name
+                        new_factor_cal_df = new_factor_cal_df.rename(
+                            columns={"factor_placeholder": identity}
+                        )
+                        var = pd.merge(
+                            var,
+                            new_factor_cal_df,
+                            on=["合约代码", "交易日期"],
+                            how="outer",
+                        )
+
+            if model_training:
+                var.to_csv(f"OutputDir/{var_name}_pre_drop_df.csv", index=False)
+                var.drop(
+                    columns=[
+                        "品种名称",
+                        "前结算价",
+                        "开盘价",
+                        "最高价",
+                        "最低价",
+                        "收盘价",
+                        "结算价",
+                        "涨跌",
+                        "涨跌1",
+                        "成交量",
+                        "持仓量",
+                        "持仓量变化",
+                        "成交额",
+                        "LastDayClosePrice",
+                        "OISum",
+                        "ATR_14",
+                        "EMA_7",
+                        "EMA_12",
+                        "EMA_26",
+                        "EMA_9",
+                        "EMA_21",
+                        "LoEvent",
+                        "BBandsUpper_20",
+                        "BBandsMiddle_20",
+                        "BBandsLower_20",
+                        "BBandsWidth",
+                        "BBandsBreakLow",
+                        "RSI_14",
+                        "RSILoEvent",
+                        "RngRel",
+                        "TopNet_20",
+                        "TopTotal_20",
+                        "TopNet_5",
+                        "TopTotal_5",
+                        # "ROCNext",
+                        "LogReturnStockIndex_0_correlation",
+                        # "LogReturnStockIndex_3_correlation",
+                        "LogReturnStockIndex_0_category",
+                        # "LogReturnStockIndex_3_category",
+                        "IsMain",
+                        "AggAtr",
+                        "RelativeToPred",
+                        "RelativeToMainLogDiff",
+                        "DEVEmaQuantile_60_20",
+                        "DEVEmaQuantile_60_80",
+                        "NumEffectiveDays_60",
+                        "合约代码",
+                        "前收盘价",
+                    ],
+                    inplace=True,
+                )
+                var = var.dropna(
+                    subset=var.columns.difference(["UpDownNext", "ROCNext"])
+                ).loc[~np.isinf(var["ROCNext"])]
+                var.to_csv(f"OutputDir/{var_name}_after_drop_df.csv", index=False)
+                # train model by var
+                final_preds = model.run_walkforward(var)
+                if final_preds[0] > global_var.UP_TH:
+                    print(cut_off_date, "涨", final_preds)
+                elif final_preds[0] < global_var.DN_TH:
+                    print(cut_off_date, "跌", final_preds)
+                else:
+                    print(cut_off_date, "无", final_preds)
 
     if factor_mining:
         # 1. compute factor ic

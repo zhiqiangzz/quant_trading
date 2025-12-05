@@ -2,14 +2,13 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 import math
+import vtreat
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 # ==================== 全局参数 ======================
-UP_TH = 0.60
-DN_TH = 0.40
 EPS_ALPHA = 0.20
 EPS_K = 0.25
 
@@ -42,21 +41,6 @@ def make_labels_with_deadzone(r_next, eps):
     """生成涨跌标签 (1,0,NaN)"""
     y = np.where(r_next > eps, 1, np.where(r_next < -eps, 0, np.nan))
     return y
-
-
-def compute_weights(df, eps, w_time=None):
-    """样本加权"""
-    w_dead = np.minimum(1, np.abs(df["ROCNext"]) / (eps + 1e-8))
-    w_role = 1 + MAIN_ALPHA * df.get("IsMain", 0)
-    if "DiffAbsATR14" in df:
-        cap = np.nanquantile(df["DiffAbsATR14"], DIFF_CAP_Q)
-        diff_c = np.minimum(df["DiffAbsATR14"], cap)
-        w_px = np.exp(-PRICE_GAMMA * diff_c)
-    else:
-        w_px = 1
-    w = w_dead * w_role * w_px * (w_time if w_time is not None else 1)
-    w = np.clip(w, W_MIN, W_MAX)
-    return w / np.nanmean(w)
 
 
 def should_fallback_platt(p_raw, y_bin):
@@ -95,38 +79,100 @@ def predict_calibrated(calibrator, p_raw):
 
 
 def walk_forward_split(df, date_col="交易日期", train_ratio=0.6):
-    """
-    对时间序列 df 进行 walk-forward 拆分：
-    - 初始窗口：前 train_ratio 比例的数据；
-    - 每次训练集向前滚动 1 天；
-    - 每次验证集为下一天；
-    """
     df = df.sort_values(date_col).reset_index(drop=True)
     n_total = len(df)
     n_train_init = int(n_total * train_ratio)
 
     splits = []
     # 每次从当前窗口预测下一天
-    for i in range(n_train_init, n_total):
-        train_start = i - n_train_init
-        train_end = i  # 不含第 i 行
-        if df.iloc[i]["交易日期"] == df.iloc[i - 1]["交易日期"]:
-            # find the next day that is not the same as the current day
-            for j in range(i + 1, n_total):
-                if df.iloc[j]["交易日期"] != df.iloc[i]["交易日期"]:
-                    train_end = j
-                    break
+    train_start = n_total - n_train_init
+    train_end = n_total
 
-        val_day = i  # 用于验证
-        for j in range(train_end, n_total):
-            if df.iloc[j]["IsMain"] == 1:
-                val_day = j
+    for j in reversed(range(train_start, train_end)):
+        if df.iloc[j]["IsPredicted"] == 1:
+            val_day = j
+            break
 
-        train_df = df.iloc[train_start:train_end]
-        val_df = df.iloc[[val_day]]  # 验证1天
-        splits.append((train_df, val_df))
+    train_df = df.iloc[train_start:train_end]
+    val_df = df.iloc[[val_day]]
+    splits.append((train_df, val_df))
 
     return splits
+
+
+def compute_weights(
+    df_sub, eps, main_alpha=MAIN_ALPHA, gamma=PRICE_GAMMA, cap_q=DIFF_CAP_Q
+):
+    # w_dead = pmin(1, abs(r_oc_next)/(eps+1e-8))
+    w_dead = np.minimum(1, np.abs(df_sub["ROCNext"]) / (eps + 1e-8))
+
+    # w_role：主力合约加权
+    if "IsPredicted" in df_sub.columns:
+        w_role = 1 + main_alpha * df_sub["IsPredicted"].isin([1, True]).astype(float)
+    else:
+        w_role = np.ones(len(df_sub))
+
+    # w_px：基于 diff_abs_atr 的价格衰减
+    if "DiffAbsAtr" in df_sub.columns:
+        cap = np.quantile(df_sub["DiffAbsAtr"].dropna(), cap_q)
+        if not np.isfinite(cap) or np.isnan(cap):
+            cap = max(1.0, np.nanmedian(df_sub["DiffAbsAtr"]))
+
+        diff_c = np.minimum(df_sub["DiffAbsAtr"], cap)
+        w_px = np.exp(-gamma * diff_c)
+    else:
+        w_px = np.ones(len(df_sub))
+
+    # final weight = w_dead * w_role * w_px, 并做 clipping
+    w = w_dead * w_role * w_px
+    w = np.clip(w, W_MIN, W_MAX)
+
+    # # normalize
+    w = w / np.nanmean(w)
+
+    return w
+
+
+data_order = [
+    "ROC_0",
+    "RGap",
+    "RangeLnHL",
+    "CLV",
+    "DLogVol",
+    "ATRRelative_14",
+    "DEVLogVol_7",
+    "DEVEma_7",
+    "Slope_7_14",
+    "Spread_7_21",
+    "HiEvent",
+    "MACDLine_12_26",
+    "MACDSignal_9",
+    "BBandsPercentB",
+    "BBandsWidthRelative",
+    "BBandsBreakHigh",
+    "ADX_14",
+    "RSICenter",
+    "RSIHiEvent",
+    "HV_15_10",
+    "d_HV",
+    "ChaikinVolatility_10",
+    "OBVFlow_7",
+    "Mom_10",
+    "RngMean_10",
+    "DRngMean",
+    "DomTop_20",
+    "SkewTop_20",
+    "DNetAtrTop_5_1",
+    "DNetAtrTop_20_5",
+    "LogReturnStockIndex_3_category",
+    "LogReturnStockIndex_3_correlation",
+    "Beta_60_40_category",
+    "ExRet60_category",
+    "Beta_60_40_correlation",
+    "ExRet60_correlation",
+    "BasisRate",
+    "DaysToExpiry",
+]
 
 
 # ==================== 主逻辑 ======================
@@ -136,50 +182,59 @@ def run_walkforward(df: pd.DataFrame):
         c
         for c in df.columns
         if c
-        not in ["交易日期", "合约代码", "品种名称", "ROCNext", "IsMain", "DiffAbsATR14"]
+        not in [
+            "交易日期",
+            "合约代码",
+            "品种名称",
+            "ROCNext",
+            "IsPredicted",
+            "DiffAbsAtr",
+            "UpDownNext",
+        ]
     ]
 
-    preds, trues = [], []
-
-    for train_set, test_set in walk_forward_split(df):
-        eps = estimate_eps(train_set["ROCNext"], train_set["ATRRel14"])
+    for train_set, predict_data in reversed(walk_forward_split(df)):
+        train_feature_col = data_order
+        # 1. 数据准备
+        eps = estimate_eps(train_set["ROCNext"], train_set["ATRRelative_14"])
         label = make_labels_with_deadzone(train_set["ROCNext"], eps)
         keep = np.logical_not(np.isnan(label))
-        train_set = train_set.loc[keep]
+        train_set_kept = train_set.loc[keep]
+
         label = label[keep].astype(int)
-        tr_label = label[:split_point]
-        val_label = label[split_point:]
 
-        max_date = w_train["交易日期"].max()
-        age_all = (max_date - w_train["交易日期"]).dt.days.astype(float)
-        w_time_all = 0.5 ** (age_all / TIME_HALFLIFE)
+        # 2. 权重计算
+        w_train = compute_weights(train_set_kept, eps)
 
-        total_size = len(train_set)
+        max_date = train_set["交易日期"].max()
+        age_win_all = (max_date - train_set["交易日期"]).dt.days
 
-        split_point = max(20, math.floor(0.15 * total_size))
+        age_win_f = age_win_all[keep]
+        w_time_win = 0.5 ** (age_win_f / TIME_HALFLIFE)
 
-        if total_size <= split_point + 5:
-            split_point = max(5, math.floor(0.1 * total_size))
+        w_train = w_train * w_time_win
+        w_train = np.clip(w_train, W_MIN, W_MAX)
+        w_train = w_train / np.nanmean(w_train)
 
-        total_data = train_set[feat_cols].to_numpy(dtype=float)
-        data_to_train = total_data[:split_point]
-        data_to_val = total_data[split_point:]
+        # --- 修改开始 ---
 
-        w_train = compute_weights(train_set, eps, w_time_all)
-        w_train_tr = w_train[:split_point]
-        w_train_val = w_train[split_point:]
+        X_full = train_set_kept[train_feature_col].to_numpy(dtype=float)
 
-        pos_w = w_train_tr[tr_label == 1].sum()
-        neg_w = w_train_tr[tr_label == 0].sum()
+        y_full = label
+        w_full = w_train
 
-        if pos_w > 0 and neg_w > 0:
-            spw = min(neg_w / max(pos_w, 1), 100)
+        # 【关键修改点 1】：直接使用全量数据构建 dtrain
+        dtrain = xgb.DMatrix(X_full, label=y_full, weight=w_full)
+
+        # 基于全量数据计算 scale_pos_weight
+        pos_w_all = w_full[y_full == 1].sum()
+        neg_w_all = w_full[y_full == 0].sum()
+
+        if pos_w_all > 0 and neg_w_all > 0:
+            spw_all = min(neg_w_all / max(pos_w_all, 1), 100)
         else:
-            spw = 1
+            spw_all = 1
 
-        # XGBoost 训练
-        dtrain = xgb.DMatrix(data_to_train, label=tr_label, weight=w_train_tr)
-        dval = xgb.DMatrix(data_to_val, label=val_label, weight=w_train_val)
         params = {
             "objective": "binary:logistic",
             "eval_metric": "logloss",
@@ -190,47 +245,45 @@ def run_walkforward(df: pd.DataFrame):
             "colsample_bytree": 0.8,
             "lambda": 2,
             "alpha": 1,
-            "scale_pos_weight": spw,
+            "scale_pos_weight": spw_all,
+            "seed": 1031,
         }
 
         model = xgb.train(
             params,
-            evals=[(dtrain, "train"), (dval, "eval")],
-            num_boost_round=300,
+            dtrain,
+            num_boost_round=10000,
+            evals=[(dtrain, "train")],
+            verbose_eval=False,  # 对应 R 中的 verbose = 0
             early_stopping_rounds=100,
         )
 
-        # 校准
-        p_val_raw = model.predict(dtrain)
-        kind, calib = calibrate(p_val_raw, label)
+        m_win = len(X_full)
 
-        X_test = test_set[feat_cols].to_numpy(dtype=float)
-        p_test_raw = model.predict(xgb.DMatrix(X_test))
-        p_test = predict_calibrated((kind, calib), p_test_raw)
-        p_test = np.clip(p_test, P_EPS, 1 - P_EPS)
+        if m_win >= 50:
+            val_n = max(20, int(0.2 * m_win))
 
-        pred = np.where(p_test >= UP_TH, 1, np.where(p_test <= DN_TH, 0, np.nan))
-        true = make_labels_with_deadzone(test_set["ROCNext"], eps)
-        preds.append(pred[0])
-        trues.append(true[0])
+            X_calib = X_full[-val_n:]
+            y_calib = y_full[-val_n:]
 
-    preds, trues = np.array(preds), np.array(trues)
-    mask = ~np.isnan(preds) & ~np.isnan(trues)
-    if np.sum(mask) == 0:
-        print("可交易样本过少")
-        return None
-    acc = accuracy_score(trues[mask], preds[mask])
-    cm = confusion_matrix(trues[mask], preds[mask])
-    print("Confusion matrix:\n", cm)
-    print(f"Walk-forward Accuracy={acc:.4f} | Trade rate={100*np.mean(mask):.2f}%")
-    return acc, model, (kind, calib), feat_cols
+            dcalib = xgb.DMatrix(X_calib)
+            p_val_raw = model.predict(dcalib)
 
+            iso_reg = IsotonicRegression(
+                y_min=0, y_max=1, out_of_bounds="clip", increasing=True
+            )
 
-# ==================== 预测接口 ======================
-def predict_next(model, calibrator, feat_cols, next_df):
-    X_next = next_df[feat_cols].to_numpy(dtype=float)
-    p_raw = model.predict(xgb.DMatrix(X_next))
-    p = predict_calibrated(calibrator, p_raw)
-    p = np.clip(p, P_EPS, 1 - P_EPS)
-    cls = np.where(p >= UP_TH, "涨", np.where(p <= DN_TH, "跌", "无"))
-    return pd.DataFrame({"prob": p, "class": cls})
+            try:
+                iso_reg.fit(p_val_raw, y_calib)
+                model.iso_calibrator = iso_reg
+            except Exception as e:
+                print(f"Isotonic Regression failed: {e}")
+                model.iso_calibrator = None
+        else:
+            model.iso_calibrator = None
+
+        raw_preds = model.predict(
+            xgb.DMatrix(predict_data[train_feature_col].to_numpy(dtype=float))
+        )
+        final_preds = model.iso_calibrator.predict(raw_preds)
+        return final_preds

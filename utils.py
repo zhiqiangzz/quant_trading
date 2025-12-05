@@ -122,7 +122,7 @@ def canonicalize_datetime_column(df):
     df = df[pd.to_datetime(df["交易日期"], errors="coerce").notna()].reset_index(
         drop=True
     )
-    df["交易日期"] = pd.to_datetime(df["交易日期"]).dt.date
+    df["交易日期"] = pd.to_datetime(df["交易日期"]).dt.normalize()
     # sort by trading date
     df = df.sort_values("交易日期")
 
@@ -155,18 +155,22 @@ def filter_contracts(df, selected_date):
 
         return False
 
+    df = df[df["交易日期"] <= selected_date]
     mask = df["合约代码"].apply(is_contract_in_range)
     filtered_df = df[mask].copy()
 
     return filtered_df
 
 
-def prepoccess_data(df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False):
+def prepoccess_data(
+    df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False, cut_off_date=None
+):
     df = to_numeric(df, ["开盘价", "收盘价", "成交量", "持仓量", "结算价", "前结算价"])
 
     df = df[~df["品种名称"].isin(EXCLUDE_SYMS)].copy()
     df = df.sort_values(["合约代码", "交易日期"])
     df["DaysToExpiry"] = df.groupby("合约代码").cumcount(ascending=False)
+    df["前收盘价"] = df.groupby("合约代码")["收盘价"].shift(1)
 
     # delete row with any item is NA
     df = df.dropna(
@@ -182,6 +186,16 @@ def prepoccess_data(df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False):
     if only_keep_major:
         df = df[df["IsMain"] == 1]
         df["合约代码"] = "major_contract_placeholder"
+
+    # predicted is the first trading date after cut_off_date
+    # add extra column IsPredicted to indicate if the contract of that row is same as the predicted contract
+    if cut_off_date is not None:
+        predicted_date = df[df["交易日期"] >= cut_off_date]["交易日期"].min()
+        # set the predicted contract list of the predicted date and IsMain is 1
+        predict_contract_list = df[
+            (df["交易日期"] == predicted_date) & (df["IsMain"] == 1)
+        ]["合约代码"].tolist()
+        df["IsPredicted"] = df["合约代码"].isin(predict_contract_list)
 
     return df
 
