@@ -462,6 +462,30 @@ class MACDSignal(BaseProcessorWithParam):
         return MACDHelper(df["MACDLine_12_26"], self._pop_param())
 
 
+class MACDHist(BaseProcessor):
+    def compute(self):
+        (df,) = self.dfs
+        return df["MACDLine_12_26"] - df["MACDSignal_9"]
+
+
+class MACDHistNorm(BaseProcessor):
+    def compute(self):
+        (df,) = self.dfs
+        return df["MACDHist"] / np.maximum(df["ATR_14"], 1e-8)
+
+
+class MACDHistCrossEvent(BaseProcessor):
+    def compute(self):
+        (df,) = self.dfs
+        return np.where(
+            (df["MACDHist"] != df["MACDHist"].shift(1))
+            & (df["MACDHist"].notna())
+            & (df["MACDHist"].shift(1).notna()),
+            1,
+            0,
+        )
+
+
 class BBandsUpper(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs

@@ -1,12 +1,8 @@
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-import math
-import vtreat
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import confusion_matrix, accuracy_score
 
 # ==================== 全局参数 ======================
 EPS_ALPHA = 0.20
@@ -145,8 +141,8 @@ data_order = [
     "Slope_7_14",
     "Spread_7_21",
     "HiEvent",
-    "MACDLine_12_26",
-    "MACDSignal_9",
+    "MACDHistNorm",
+    "MACDHistCrossEvent",
     "BBandsPercentB",
     "BBandsWidthRelative",
     "BBandsBreakHigh",
@@ -176,11 +172,10 @@ data_order = [
 
 
 # ==================== 主逻辑 ======================
-def run_walkforward(df: pd.DataFrame):
-    df = df.sort_values("交易日期").reset_index(drop=True)
+def run_walkforward(train_set: pd.DataFrame):
     feat_cols = [
         c
-        for c in df.columns
+        for c in train_set.columns
         if c
         not in [
             "交易日期",
@@ -193,97 +188,100 @@ def run_walkforward(df: pd.DataFrame):
         ]
     ]
 
-    for train_set, predict_data in reversed(walk_forward_split(df)):
-        train_feature_col = data_order
-        # 1. 数据准备
-        eps = estimate_eps(train_set["ROCNext"], train_set["ATRRelative_14"])
-        label = make_labels_with_deadzone(train_set["ROCNext"], eps)
-        keep = np.logical_not(np.isnan(label))
-        train_set_kept = train_set.loc[keep]
+    train_feature_col = data_order
+    # 1. 数据准备
+    eps = estimate_eps(train_set["ROCNext"], train_set["ATRRelative_14"])
+    label = make_labels_with_deadzone(train_set["ROCNext"], eps)
+    keep = np.logical_not(np.isnan(label))
+    train_set_kept = train_set.loc[keep]
 
-        label = label[keep].astype(int)
+    label = label[keep].astype(int)
 
-        # 2. 权重计算
-        w_train = compute_weights(train_set_kept, eps)
+    # 2. 权重计算
+    w_train = compute_weights(train_set_kept, eps)
 
-        max_date = train_set["交易日期"].max()
-        age_win_all = (max_date - train_set["交易日期"]).dt.days
+    max_date = train_set["交易日期"].max()
+    age_win_all = (max_date - train_set["交易日期"]).dt.days
 
-        age_win_f = age_win_all[keep]
-        w_time_win = 0.5 ** (age_win_f / TIME_HALFLIFE)
+    age_win_f = age_win_all[keep]
+    w_time_win = 0.5 ** (age_win_f / TIME_HALFLIFE)
 
-        w_train = w_train * w_time_win
-        w_train = np.clip(w_train, W_MIN, W_MAX)
-        w_train = w_train / np.nanmean(w_train)
+    w_train = w_train * w_time_win
+    w_train = np.clip(w_train, W_MIN, W_MAX)
+    w_train = w_train / np.nanmean(w_train)
 
-        # --- 修改开始 ---
+    # --- 修改开始 ---
 
-        X_full = train_set_kept[train_feature_col].to_numpy(dtype=float)
+    X_full = train_set_kept[train_feature_col].to_numpy(dtype=float)
 
-        y_full = label
-        w_full = w_train
+    y_full = label
+    w_full = w_train
 
-        # 【关键修改点 1】：直接使用全量数据构建 dtrain
-        dtrain = xgb.DMatrix(X_full, label=y_full, weight=w_full)
+    # 【关键修改点 1】：直接使用全量数据构建 dtrain
+    dtrain = xgb.DMatrix(X_full, label=y_full, weight=w_full)
 
-        # 基于全量数据计算 scale_pos_weight
-        pos_w_all = w_full[y_full == 1].sum()
-        neg_w_all = w_full[y_full == 0].sum()
+    # 基于全量数据计算 scale_pos_weight
+    pos_w_all = w_full[y_full == 1].sum()
+    neg_w_all = w_full[y_full == 0].sum()
 
-        if pos_w_all > 0 and neg_w_all > 0:
-            spw_all = min(neg_w_all / max(pos_w_all, 1), 100)
-        else:
-            spw_all = 1
+    if pos_w_all > 0 and neg_w_all > 0:
+        spw_all = min(neg_w_all / max(pos_w_all, 1), 100)
+    else:
+        spw_all = 1
 
-        params = {
-            "objective": "binary:logistic",
-            "eval_metric": "logloss",
-            "eta": 0.05,
-            "max_depth": 4,
-            "min_child_weight": 5,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "lambda": 2,
-            "alpha": 1,
-            "scale_pos_weight": spw_all,
-            "seed": 1031,
-        }
+    params = {
+        "objective": "binary:logistic",
+        "eval_metric": "logloss",
+        "eta": 0.05,
+        "max_depth": 4,
+        "min_child_weight": 5,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "lambda": 2,
+        "alpha": 1,
+        "scale_pos_weight": spw_all,
+        "seed": 1031,
+    }
 
-        model = xgb.train(
-            params,
-            dtrain,
-            num_boost_round=10000,
-            evals=[(dtrain, "train")],
-            verbose_eval=False,  # 对应 R 中的 verbose = 0
-            early_stopping_rounds=100,
+    model = xgb.train(
+        params,
+        dtrain,
+        num_boost_round=10000,
+        evals=[(dtrain, "train")],
+        verbose_eval=False,  # 对应 R 中的 verbose = 0
+        early_stopping_rounds=100,
+    )
+
+    m_win = len(X_full)
+
+    if m_win >= 50:
+        val_n = max(20, int(0.2 * m_win))
+
+        X_calib = X_full[-val_n:]
+        y_calib = y_full[-val_n:]
+
+        dcalib = xgb.DMatrix(X_calib)
+        p_val_raw = model.predict(dcalib)
+
+        iso_reg = IsotonicRegression(
+            y_min=0, y_max=1, out_of_bounds="clip", increasing=True
         )
 
-        m_win = len(X_full)
-
-        if m_win >= 50:
-            val_n = max(20, int(0.2 * m_win))
-
-            X_calib = X_full[-val_n:]
-            y_calib = y_full[-val_n:]
-
-            dcalib = xgb.DMatrix(X_calib)
-            p_val_raw = model.predict(dcalib)
-
-            iso_reg = IsotonicRegression(
-                y_min=0, y_max=1, out_of_bounds="clip", increasing=True
-            )
-
-            try:
-                iso_reg.fit(p_val_raw, y_calib)
-                model.iso_calibrator = iso_reg
-            except Exception as e:
-                print(f"Isotonic Regression failed: {e}")
-                model.iso_calibrator = None
-        else:
+        try:
+            iso_reg.fit(p_val_raw, y_calib)
+            model.iso_calibrator = iso_reg
+        except Exception as e:
+            print(f"Isotonic Regression failed: {e}")
             model.iso_calibrator = None
+    else:
+        model.iso_calibrator = None
 
-        raw_preds = model.predict(
-            xgb.DMatrix(predict_data[train_feature_col].to_numpy(dtype=float))
-        )
-        final_preds = model.iso_calibrator.predict(raw_preds)
-        return final_preds
+    return model
+
+
+def predict(xgb_model, predict_element: pd.DataFrame):
+    raw_preds = xgb_model.predict(
+        xgb.DMatrix(predict_element[data_order].to_numpy(dtype=float))
+    )
+    final_preds = xgb_model.iso_calibrator.predict(raw_preds)
+    return raw_preds, final_preds

@@ -314,6 +314,9 @@ CONFIG = {
                 LoEvent(),
                 MACDLine(12, 26),
                 MACDSignal(9),
+                MACDHist(),
+                MACDHistNorm(),
+                MACDHistCrossEvent(),
                 BBandsUpper(20),
                 BBandsMiddle(20),
                 BBandsLower(20),
@@ -473,7 +476,30 @@ def main():
         var_indices = grouped.groups[var_name]
         var_all = major.loc[var_indices].copy().reset_index(drop=True)
         var_all = var_all.sort_values(["交易日期", "合约代码"])
-        var_all.to_csv(f"InputDir/{var_name}_raw_df.csv", index=False)
+        # var_all.to_csv(f"InputDir/{var_name}_raw_df.csv", index=False)
+
+        for factor_category in args.factors:
+            for factor_subcategory_name, factor_subcategory in CONFIG[
+                factor_category
+            ].items():
+                for factor_func in factor_subcategory["factors"]:
+                    factor_name = factor_func.name()
+                    new_factor_cal_df = factor_compute(
+                        factor_func,
+                        var_all,
+                        var_name,
+                        factor_subcategory.get("files"),
+                    )
+                    identity = factor_name
+                    new_factor_cal_df = new_factor_cal_df.rename(
+                        columns={"factor_placeholder": identity}
+                    )
+                    var_all = pd.merge(
+                        var_all,
+                        new_factor_cal_df,
+                        on=["合约代码", "交易日期"],
+                        how="outer",
+                    )
 
         for cut_off_date in [
             pd.to_datetime("2025-01-03"),
@@ -484,32 +510,8 @@ def main():
             pd.to_datetime("2025-01-13"),
         ]:
             var = utils.filter_contracts(var_all, cut_off_date)
-
-            for factor_category in args.factors:
-                for factor_subcategory_name, factor_subcategory in CONFIG[
-                    factor_category
-                ].items():
-                    for factor_func in factor_subcategory["factors"]:
-                        factor_name = factor_func.name()
-                        new_factor_cal_df = factor_compute(
-                            factor_func,
-                            var,
-                            var_name,
-                            factor_subcategory.get("files"),
-                        )
-                        identity = factor_name
-                        new_factor_cal_df = new_factor_cal_df.rename(
-                            columns={"factor_placeholder": identity}
-                        )
-                        var = pd.merge(
-                            var,
-                            new_factor_cal_df,
-                            on=["合约代码", "交易日期"],
-                            how="outer",
-                        )
-
             if model_training:
-                var.to_csv(f"OutputDir/{var_name}_pre_drop_df.csv", index=False)
+                # var.to_csv(f"Py_contract_totrain_pre.csv", index=False)
                 var.drop(
                     columns=[
                         "品种名称",
@@ -560,21 +562,31 @@ def main():
                         "NumEffectiveDays_60",
                         "合约代码",
                         "前收盘价",
+                        "MACDLine_12_26",
+                        "MACDSignal_9",
+                        "MACDHist",
                     ],
                     inplace=True,
                 )
                 var = var.dropna(
                     subset=var.columns.difference(["UpDownNext", "ROCNext"])
                 ).loc[~np.isinf(var["ROCNext"])]
-                var.to_csv(f"OutputDir/{var_name}_after_drop_df.csv", index=False)
-                # train model by var
-                final_preds = model.run_walkforward(var)
-                if final_preds[0] > global_var.UP_TH:
-                    print(cut_off_date, "涨", final_preds)
-                elif final_preds[0] < global_var.DN_TH:
-                    print(cut_off_date, "跌", final_preds)
+
+                predict_element = var[
+                    (var["交易日期"] == cut_off_date) & (var["IsPredicted"] == 1)
+                ]
+                var = var[var["交易日期"] != cut_off_date]
+
+                # var.to_csv(f"Py_contract_totrain.csv", index=False)
+                xgb_model = model.run_walkforward(var)
+                raw_preds, _ = model.predict(xgb_model, predict_element)
+
+                if raw_preds > global_var.UP_TH:
+                    print(cut_off_date, "涨", raw_preds)
+                elif raw_preds < global_var.DN_TH:
+                    print(cut_off_date, "跌", raw_preds)
                 else:
-                    print(cut_off_date, "无", final_preds)
+                    print(cut_off_date, "无", raw_preds)
 
     if factor_mining:
         # 1. compute factor ic
