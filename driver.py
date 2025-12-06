@@ -387,8 +387,12 @@ def factor_compute(func: BaseProcessor, var: pd.DataFrame, var_name: str, files:
             dfs = [new_factor_cal_df]
             dfs = [df for df in dfs if not df.empty and not df.isna().all().all()]
 
-            new_factor_cal_df = pd.concat(
-                [new_factor_cal_df, func.run(args)], axis=0, ignore_index=True
+            new_factor_cal_df = (
+                pd.concat(
+                    [new_factor_cal_df, func.run(args)], axis=0, ignore_index=True
+                )
+                if not new_factor_cal_df.empty
+                else func.run(args)
             )
 
     return new_factor_cal_df
@@ -560,7 +564,7 @@ def main():
                         "DEVEmaQuantile_60_20",
                         "DEVEmaQuantile_60_80",
                         "NumEffectiveDays_60",
-                        "合约代码",
+                        # "合约代码",
                         "前收盘价",
                         "MACDLine_12_26",
                         "MACDSignal_9",
@@ -577,7 +581,7 @@ def main():
                 ]
                 var = var[var["交易日期"] != cut_off_date]
 
-                # var.to_csv(f"Py_contract_totrain.csv", index=False)
+                var.to_csv(f"Py_contract_totrain.csv", index=False)
                 xgb_model = model.run_walkforward(var)
                 raw_preds, _ = model.predict(xgb_model, predict_element)
 

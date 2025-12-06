@@ -265,14 +265,14 @@ class NumEffectiveDays(BaseProcessorWithParam):
 class HiEvent(BaseProcessor):
     def compute(self):
         (df,) = self.dfs
-        num_effective_days = df["NumEffectiveDays_60"].fillna(False).astype(bool)
+        num_effective_days = df["NumEffectiveDays_60"].fillna(0).astype(bool)
         return num_effective_days & (df[f"DEVEma_7"] > df[f"DEVEmaQuantile_60_80"])
 
 
 class LoEvent(BaseProcessor):
     def compute(self):
         (df,) = self.dfs
-        num_effective_days = df["NumEffectiveDays_60"].fillna(False).astype(bool)
+        num_effective_days = df["NumEffectiveDays_60"].fillna(0).astype(bool)
         return num_effective_days & (df[f"DEVEma_7"] < df[f"DEVEmaQuantile_60_20"])
 
 
@@ -478,7 +478,7 @@ class MACDHistCrossEvent(BaseProcessor):
     def compute(self):
         (df,) = self.dfs
         return np.where(
-            (df["MACDHist"] != df["MACDHist"].shift(1))
+            (np.sign(df["MACDHist"]) != np.sign(df["MACDHist"].shift(1)))
             & (df["MACDHist"].notna())
             & (df["MACDHist"].shift(1).notna()),
             1,
@@ -664,7 +664,8 @@ class RelativeToPred(AggregateProcessor):
                     x["结算价"] - x.loc[x["IsPredicted"] == 1, "结算价"].iloc[0]
                     if (x["IsPredicted"] == 1).any()
                     else pd.Series([np.nan] * len(x), index=x.index)
-                )
+                ),
+                include_groups=False,
             )
             .reset_index(level=0, drop=True)
         )
@@ -676,7 +677,10 @@ class RelativeToMainLogDiff(AggregateProcessor):
         RelativeToMainDiff = (
             np.log(
                 df.groupby("交易日期")
-                .apply(lambda x: (x.loc[x["IsMain"] == 1, "结算价"].iloc[0]))
+                .apply(
+                    lambda x: (x.loc[x["IsMain"] == 1, "结算价"].iloc[0]),
+                    include_groups=False,
+                )
                 .clip(lower=1e-12)
             )
             .diff()
@@ -702,9 +706,7 @@ class LastDayClosePrice(BaseProcessor):
 class OISum(AggregateProcessor):
     def compute(self):
         (df,) = self.dfs
-        OISum = (
-            df.groupby("交易日期").apply(lambda x: x["持仓量"].sum()).rename("OISum")
-        )
+        OISum = df.groupby("交易日期")["持仓量"].sum().rename("OISum")
 
         return df.merge(OISum, on="交易日期", how="left")["OISum"]
 
@@ -734,7 +736,9 @@ class AggAtr(AggregateProcessor):
                 return np.average(v, weights=w)
 
         TR_agg = (
-            df.groupby("交易日期").apply(lambda x: weighted_mean(x)).rename("AggATR14")
+            df.groupby("交易日期")
+            .apply(lambda x: weighted_mean(x), include_groups=False)
+            .rename("AggATR14")
         )
         AggATR14 = TR_agg.rolling(window=14, min_periods=1).mean()
 
@@ -797,7 +801,8 @@ class DNetAtrTop(AggregateProcessorWithParam):
                     topN_name: x[f"TopNet_{topN}"].mean(),
                     "AggAtrMean": x["AggAtr"].mean(),
                 }
-            )
+            ),
+            include_groups=False,
         )
 
         result = (
@@ -836,7 +841,8 @@ class Beta(AggregateProcessorWithParam):
                         f"LogReturnStockIndex_0_{category}"
                     ].mean(),
                 }
-            )
+            ),
+            include_groups=False,
         )
 
         rF = tmp["RelativeToMainLogDiff"].astype(float)
