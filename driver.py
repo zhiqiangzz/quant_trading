@@ -339,8 +339,14 @@ CONFIG = {
                 RngMean(10),
                 DRngMean(),
                 UpDownNext(),
-                RelativeToPred(),
                 RelativeToMainLogDiff(),
+            ],
+        },
+    },
+    "predict": {
+        "predict": {
+            "factors": [
+                RelativeToPred(),
                 DiffAbsAtr(),
             ],
         },
@@ -446,6 +452,32 @@ def factor_compute(func: BaseProcessor, var: pd.DataFrame, var_name: str, files:
 #                 var[factor_name] = func(var, profit_var)
 
 
+def all_factor_compute(factors: list[str], var_all: pd.DataFrame, var_name: str):
+    for factor_category in factors:
+        for factor_subcategory_name, factor_subcategory in CONFIG[
+            factor_category
+        ].items():
+            for factor_func in factor_subcategory["factors"]:
+                factor_name = factor_func.name()
+                new_factor_cal_df = factor_compute(
+                    factor_func,
+                    var_all,
+                    var_name,
+                    factor_subcategory.get("files"),
+                )
+                identity = factor_name
+                new_factor_cal_df = new_factor_cal_df.rename(
+                    columns={"factor_placeholder": identity}
+                )
+                var_all = pd.merge(
+                    var_all,
+                    new_factor_cal_df,
+                    on=["合约代码", "交易日期"],
+                    how="outer",
+                )
+    return var_all
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -470,9 +502,7 @@ def main():
 
     cut_off_date = pd.to_datetime("2025-01-03")
 
-    major = utils.prepoccess_data(
-        profit_var, only_keep_major=factor_mining, cut_off_date=cut_off_date
-    )
+    major = utils.prepoccess_data(profit_var, only_keep_major=factor_mining)
 
     grouped = major.groupby("品种名称")
 
@@ -481,95 +511,25 @@ def main():
         var_all = major.loc[var_indices].copy().reset_index(drop=True)
         var_all = var_all.sort_values(["交易日期", "合约代码"])
         # var_all.to_csv(f"InputDir/{var_name}_raw_df.csv", index=False)
+        # trading_date_list = var_all["交易日期"].unique().tolist()
+        # # dump to a txt file
+        # with open(f"InputDir/{var_name}_trading_date_list.txt", "w") as f:
+        #     for date in trading_date_list:
+        #         f.write(date.strftime("%Y-%m-%d") + "\n")
 
-        for factor_category in args.factors:
-            for factor_subcategory_name, factor_subcategory in CONFIG[
-                factor_category
-            ].items():
-                for factor_func in factor_subcategory["factors"]:
-                    factor_name = factor_func.name()
-                    new_factor_cal_df = factor_compute(
-                        factor_func,
-                        var_all,
-                        var_name,
-                        factor_subcategory.get("files"),
-                    )
-                    identity = factor_name
-                    new_factor_cal_df = new_factor_cal_df.rename(
-                        columns={"factor_placeholder": identity}
-                    )
-                    var_all = pd.merge(
-                        var_all,
-                        new_factor_cal_df,
-                        on=["合约代码", "交易日期"],
-                        how="outer",
-                    )
+        var_all = all_factor_compute(args.factors, var_all, var_name)
 
-        for cut_off_date in [
-            pd.to_datetime("2025-01-03"),
-            pd.to_datetime("2025-01-06"),
-            pd.to_datetime("2025-01-07"),
-            pd.to_datetime("2025-01-08"),
-            pd.to_datetime("2025-01-09"),
-            pd.to_datetime("2025-01-13"),
-        ]:
-            var = utils.filter_contracts(var_all, cut_off_date)
+        # create a csv file to store the predict result,which have three columns
+        pred_rows_buffer = []
+
+        for cut_off_date in global_var.trading_date_list:
+            var_cur = utils.update_predict_contract(var_all, cut_off_date)
+            var_cur = all_factor_compute(["predict"], var_cur, var_name)
+            var = utils.filter_contracts(var_cur, cut_off_date)
             if model_training:
                 # var.to_csv(f"Py_contract_totrain_pre.csv", index=False)
                 var.drop(
-                    columns=[
-                        "品种名称",
-                        "前结算价",
-                        "开盘价",
-                        "最高价",
-                        "最低价",
-                        "收盘价",
-                        "结算价",
-                        "涨跌",
-                        "涨跌1",
-                        "成交量",
-                        "持仓量",
-                        "持仓量变化",
-                        "成交额",
-                        "LastDayClosePrice",
-                        "OISum",
-                        "ATR_14",
-                        "EMA_7",
-                        "EMA_12",
-                        "EMA_26",
-                        "EMA_9",
-                        "EMA_21",
-                        "LoEvent",
-                        "BBandsUpper_20",
-                        "BBandsMiddle_20",
-                        "BBandsLower_20",
-                        "BBandsWidth",
-                        "BBandsBreakLow",
-                        "RSI_14",
-                        "RSILoEvent",
-                        "RngRel",
-                        "TopNet_20",
-                        "TopTotal_20",
-                        "TopNet_5",
-                        "TopTotal_5",
-                        # "ROCNext",
-                        "LogReturnStockIndex_0_correlation",
-                        # "LogReturnStockIndex_3_correlation",
-                        "LogReturnStockIndex_0_category",
-                        # "LogReturnStockIndex_3_category",
-                        "IsMain",
-                        "AggAtr",
-                        "RelativeToPred",
-                        "RelativeToMainLogDiff",
-                        "DEVEmaQuantile_60_20",
-                        "DEVEmaQuantile_60_80",
-                        "NumEffectiveDays_60",
-                        # "合约代码",
-                        "前收盘价",
-                        "MACDLine_12_26",
-                        "MACDSignal_9",
-                        "MACDHist",
-                    ],
+                    columns=global_var.drop_columns,
                     inplace=True,
                 )
                 var = var.dropna(
@@ -581,16 +541,31 @@ def main():
                 ]
                 var = var[var["交易日期"] != cut_off_date]
 
-                var.to_csv(f"Py_contract_totrain.csv", index=False)
+                # var.to_csv(f"Py_contract_totrain.csv", index=False)
                 xgb_model = model.run_walkforward(var)
                 raw_preds, _ = model.predict(xgb_model, predict_element)
-
-                if raw_preds > global_var.UP_TH:
-                    print(cut_off_date, "涨", raw_preds)
-                elif raw_preds < global_var.DN_TH:
-                    print(cut_off_date, "跌", raw_preds)
-                else:
-                    print(cut_off_date, "无", raw_preds)
+                predict_res = (
+                    "涨"
+                    if raw_preds > global_var.UP_TH
+                    else "跌" if raw_preds < global_var.DN_TH else "无"
+                )
+                actual_value = (
+                    "涨"
+                    if predict_element["ROCNext"].iloc[0] > 0
+                    else ("跌" if predict_element["ROCNext"].iloc[0] < 0 else "无")
+                )
+                print(cut_off_date, predict_res, actual_value, raw_preds)
+                row = {
+                    "交易日期": cut_off_date,
+                    "预测值": predict_res,
+                    "实际值": actual_value,
+                    "P": raw_preds[0],
+                }
+                pred_rows_buffer.append(row)
+        predict_result_df = pd.DataFrame(
+            pred_rows_buffer, columns=["交易日期", "预测值", "实际值", "P"]
+        )
+        predict_result_df.to_csv(f"{var_name}_predict_result.csv", index=False)
 
     if factor_mining:
         # 1. compute factor ic

@@ -138,7 +138,7 @@ def filter_contracts(df, selected_date):
     begin_date = (year - 1, month)
     month = month + 9 if day < 11 else month + 10
     year = year if month <= 12 else year + 1
-    month = month % 12
+    month = month % 13
     end_date = (year, month)
 
     def is_contract_in_range(contract_str):
@@ -162,9 +162,7 @@ def filter_contracts(df, selected_date):
     return filtered_df
 
 
-def prepoccess_data(
-    df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False, cut_off_date=None
-):
+def prepoccess_data(df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False):
     df = to_numeric(df, ["开盘价", "收盘价", "成交量", "持仓量", "结算价", "前结算价"])
 
     df = df[~df["品种名称"].isin(EXCLUDE_SYMS)].copy()
@@ -187,16 +185,26 @@ def prepoccess_data(
         df = df[df["IsMain"] == 1]
         df["合约代码"] = "major_contract_placeholder"
 
-    # predicted is the first trading date after cut_off_date
-    # add extra column IsPredicted to indicate if the contract of that row is same as the predicted contract
-    if cut_off_date is not None:
-        predicted_date = df[df["交易日期"] >= cut_off_date]["交易日期"].min()
-        # set the predicted contract list of the predicted date and IsMain is 1
-        predict_contract_list = df[
-            (df["交易日期"] == predicted_date) & (df["IsMain"] == 1)
-        ]["合约代码"].tolist()
-        df["IsPredicted"] = df["合约代码"].isin(predict_contract_list)
+    # # predicted is the first trading date after cut_off_date
+    # # add extra column IsPredicted to indicate if the contract of that row is same as the predicted contract
+    # if cut_off_date is not None:
+    #     predicted_date = df[df["交易日期"] >= cut_off_date]["交易日期"].min()
+    #     # set the predicted contract list of the predicted date and IsMain is 1
+    #     predict_contract_list = df[
+    #         (df["交易日期"] == predicted_date) & (df["IsMain"] == 1)
+    #     ]["合约代码"].tolist()
+    #     df["IsPredicted"] = df["合约代码"].isin(predict_contract_list)
 
+    return df
+
+
+def update_predict_contract(df, cut_off_date):
+    predicted_date = df[df["交易日期"] > cut_off_date]["交易日期"].min()
+    # set the predicted contract list of the predicted date and IsMain is 1
+    predict_contract_list = df[
+        (df["交易日期"] == predicted_date) & (df["IsMain"] == 1)
+    ]["合约代码"].tolist()
+    df["IsPredicted"] = df["合约代码"].isin(predict_contract_list)
     return df
 
 
