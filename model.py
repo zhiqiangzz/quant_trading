@@ -172,7 +172,9 @@ data_order = [
 
 
 # ==================== 主逻辑 ======================
-def run_walkforward(train_set: pd.DataFrame):
+def run_walkforward(
+    train_set: pd.DataFrame, cut_off_date: pd.Timestamp, IS_DEBUG: bool = False
+):
     feat_cols = [
         c
         for c in train_set.columns
@@ -212,10 +214,19 @@ def run_walkforward(train_set: pd.DataFrame):
 
     # --- 修改开始 ---
 
-    X_full = train_set_kept[train_feature_col].to_numpy(dtype=float)
+    train_set_kept_feat = train_set_kept[train_feature_col]
+    X_full = train_set_kept_feat.to_numpy(dtype=float)
 
     y_full = label
     w_full = w_train
+
+    if IS_DEBUG:
+        dump_py2train = train_set_kept.copy()
+        dump_py2train["label"] = y_full
+        dump_py2train["weight"] = w_full
+        dump_py2train.to_csv(
+            f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py2train.csv", index=False
+        )
 
     # 【关键修改点 1】：直接使用全量数据构建 dtrain
     dtrain = xgb.DMatrix(X_full, label=y_full, weight=w_full)

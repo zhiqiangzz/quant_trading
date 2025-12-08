@@ -53,6 +53,7 @@ class BaseProcessor(ABC):
         rename_dict = {
             "名称": "品种名称",
             "日期": "交易日期",
+            "交易日": "交易日期",
             "date": "交易日期",
             "开盘价(元)": "开盘价",
             "收盘价(元)": "结算价",
@@ -179,7 +180,8 @@ class CLV(BaseProcessor):
 class DLogVol(BaseProcessor):
     def compute(self):
         (df,) = self.dfs
-        return np.log1p(df["成交量"]) - np.log(df["成交量"].shift(1))
+        logVol = np.log1p(df["成交量"])
+        return logVol - logVol.shift(1)
 
 
 class ATR(BaseProcessorWithParam):
@@ -431,56 +433,45 @@ def ProductionGrowthRate(lagging: int = 1):
     return func
 
 
-def MACDHelper(series, n):
-    if series.isna().all() or len(series) < n + series.first_valid_index():
-        return pd.Series(np.nan, index=series.index)
-
-    ema = series[series.first_valid_index() :].copy()
-    ema.iloc[: n - 1] = np.nan
-    ema.iloc[n - 1] = series.iloc[:n].mean()
-    ema.iloc[n - 1 :] = ema.ewm(span=n, adjust=False).mean().iloc[n - 1 :]
-    ema = ema.reindex(series.index).fillna(np.nan)
-    return ema
-
-
-class MACDLine(BaseProcessorWithParam):
-    def compute(self):
-        (df,) = self.dfs
-        input_series = df["收盘价"]
-
-        return 100 * (
-            MACDHelper(input_series, self._pop_param())
-            / MACDHelper(input_series, self._pop_param())
-            - 1
+def macd_percent_r_style(close_series, nFast=12, nSlow=26, nSig=9):
+    close_array = close_series.astype(np.float64).values
+    ema_fast = talib.EMA(close_array, timeperiod=nFast)
+    ema_slow = talib.EMA(close_array, timeperiod=nSlow)
+    macd_percent = 100 * (
+        np.divide(
+            ema_fast, ema_slow, out=np.full_like(ema_fast, np.nan), where=ema_slow != 0
         )
+        - 1
+    )
+    signal = talib.EMA(macd_percent, timeperiod=nSig)
+    hist = macd_percent - signal
+    return hist
 
 
-class MACDSignal(BaseProcessorWithParam):
+class MACDHist(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs
-
-        return MACDHelper(df["MACDLine_12_26"], self._pop_param())
-
-
-class MACDHist(BaseProcessor):
-    def compute(self):
-        (df,) = self.dfs
-        return df["MACDLine_12_26"] - df["MACDSignal_9"]
+        return macd_percent_r_style(
+            df["收盘价"], self._pop_param(), self._pop_param(), self._pop_param()
+        )
 
 
 class MACDHistNorm(BaseProcessor):
     def compute(self):
         (df,) = self.dfs
-        return df["MACDHist"] / np.maximum(df["ATR_14"], 1e-8)
+        return df["MACDHist_12_26_9"] / np.maximum(df["ATR_14"], 1e-8)
 
 
 class MACDHistCrossEvent(BaseProcessor):
     def compute(self):
         (df,) = self.dfs
         return np.where(
-            (np.sign(df["MACDHist"]) != np.sign(df["MACDHist"].shift(1)))
-            & (df["MACDHist"].notna())
-            & (df["MACDHist"].shift(1).notna()),
+            (
+                np.sign(df["MACDHist_12_26_9"])
+                != np.sign(df["MACDHist_12_26_9"].shift(1))
+            )
+            & (df["MACDHist_12_26_9"].notna())
+            & (df["MACDHist_12_26_9"].shift(1).notna()),
             1,
             0,
         )
@@ -615,7 +606,7 @@ class ChaikinVolatility(BaseProcessorWithParam):
 class OBVFlow(BaseProcessorWithParam):
     def compute(self):
         (df,) = self.dfs
-        obv = ta.volume.on_balance_volume(df["收盘价"], df["成交量"])
+        obv = talib.OBV(df["收盘价"], df["成交量"])
         vol_ema7 = talib.EMA(df["成交量"], timeperiod=self._pop_param())
         return (obv - obv.shift(1)) / np.maximum(vol_ema7, 1e-8)
 
@@ -669,6 +660,15 @@ class RelativeToPred(AggregateProcessor):
             )
             .reset_index(level=0, drop=True)
         )
+
+
+class DaysToExpiry(AggregateProcessor):
+    def compute(self):
+        print(self.dfs)
+        pass
+        # df, expiry_dfs = self.dfs
+        # day2expiry = df.groupby("合约代码").cumcount(ascending=False)
+        # return day2expiry
 
 
 class RelativeToMainLogDiff(AggregateProcessor):

@@ -1,4 +1,5 @@
 import pandas as pd
+import argparse
 
 factor_cols = [
     "ROC_0",
@@ -39,6 +40,8 @@ factor_cols = [
     "ExRet60_correlation",
     "BasisRate",
     "DaysToExpiry",
+    "label",
+    "weight",
 ]
 coloum_shuffle = {
     "r_oc_next": "ROCNext",
@@ -82,43 +85,36 @@ coloum_shuffle = {
     "DaysToExpiry": "DaysToExpiry",
 }
 
+# parse args
+parser = argparse.ArgumentParser()
+parser.add_argument("--R", type=str, default="R_post.csv")
+parser.add_argument("--Py", type=str, default="Py_post.csv")
+args = parser.parse_args()
+
 # load output.csv
-R = pd.read_csv("R_contract_totrain.csv")
-Py = pd.read_csv("Py_contract_totrain.csv")
+R = pd.read_csv(args.R)
+Py = pd.read_csv(args.Py)
 
 R = R.round(3)
 Py = Py.round(3)
 
-# Set index so we can find intersection
-R.set_index(["交易日期", "合约代码"], inplace=True)
-Py.set_index(["交易日期", "合约代码"], inplace=True)
-
-# Find common keys
-common_index = R.index.intersection(Py.index)
-
-# Filter and RESTORE index as columns
-R_merge = R.loc[common_index].reset_index()
-Py_merge = Py.loc[common_index].reset_index()
-
-R_merge = R_merge.sort_values(["合约代码", "交易日期"])
-Py_merge = Py_merge.sort_values(["合约代码", "交易日期"])
-
-# Save with 合约代码 + 交易日期 columns included
-R_merge.to_csv("R_merge.csv", index=False)
-Py_merge.to_csv("Py_merge.csv", index=False)
-
-R_merge = R_merge.rename(columns=coloum_shuffle)
+Py = Py.rename(columns=coloum_shuffle)
+R = R.rename(columns=coloum_shuffle)
 
 # 对齐 merge（只保留两侧都有的数据）
-df_merged = pd.merge(
-    R_merge, Py_merge, on=["合约代码", "交易日期"], suffixes=("_R", "_Py")
-)
+df_merged = pd.merge(R, Py, on=["合约代码", "交易日期"], suffixes=("_R", "_Py"))
 
 for col in factor_cols:
-    df_merged[f"{col}_diff"] = df_merged[f"{col}_R"] - df_merged[f"{col}_Py"]
+    if col in df_merged.columns:
+        df_merged[f"{col}_diff"] = df_merged[f"{col}_R"] - df_merged[f"{col}_Py"]
 
 # drop R and Py suffix columns
 df_merged = df_merged.drop(
     columns=[f"{col}_R" for col in factor_cols] + [f"{col}_Py" for col in factor_cols]
 )
-df_merged.to_csv("R_Py_diff.csv", index=False)
+
+# insert to the first row
+sum_series = df_merged.filter(regex="diff$").abs().sum(axis=0)
+df_final = pd.concat([pd.DataFrame([sum_series]), df_merged], ignore_index=True)
+
+df_final.to_csv("RPy_value_diff.csv", index=False)

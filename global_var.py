@@ -112,22 +112,11 @@ trading_date_list_str = [
 trading_date_list = [pd.to_datetime(date) for date in trading_date_list_str]
 
 debug_trading_date_list_str = [
-    "2025-05-16",
-    "2025-05-19",
-    "2025-05-20",
-    "2025-05-21",
-    "2025-05-22",
-    "2025-05-23",
-    "2025-05-26",
-    "2025-05-27",
-    "2025-05-28",
-    "2025-05-29",
-    "2025-05-30",
-    "2025-06-03",
-    "2025-06-04",
-    "2025-06-05",
-    "2025-06-06",
-    "2025-06-09",
+    "2025-01-03",
+    "2025-01-06",
+    "2025-01-07",
+    "2025-01-08",
+    "2025-01-09",
 ]
 
 debug_trading_date_list = [pd.to_datetime(date) for date in debug_trading_date_list_str]
@@ -181,7 +170,5 @@ drop_columns = [
     "NumEffectiveDays_60",
     # "合约代码",
     "前收盘价",
-    "MACDLine_12_26",
-    "MACDSignal_9",
-    "MACDHist",
+    "MACDHist_12_26_9",
 ]

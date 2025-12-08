@@ -161,13 +161,112 @@ def filter_contracts(df, selected_date):
 
     return filtered_df
 
+    # # 工具：取某年某月的第 n 个交易日（不足 n 天则 NA）
+    # nth_trading_day <- function(y, m, n = 10L) {
+    #   start <- as.Date(sprintf("%04d-%02d-01", y, m))
+    #   end   <- ceiling_date(start, "month") - days(1)
+    #   days_in_month <- td_all$交易日[td_all$交易日 >= start & td_all$交易日 <= end]
+    #   if (length(days_in_month) >= n) days_in_month[n] else as.Date(NA)
+    # }
+
+    # # ========== 1) 基于 df_all 解析合约、交割日、DaysToExpiry ==========
+    # ## 先确保类型正确 ---------------------------------------------
+    # ## 1) 解析合约代码：前缀 / 年(YY) / 月(MM) ------------------------
+    # parsed <- strcapture(
+    #   pattern = "^([A-Za-z]+)(\\d{2})(\\d{2})",
+    #   x       = df_all$合约代码,
+    #   proto   = list(前缀 = character(), YY = integer(), MM = integer())
+    # )
+
+    # ## 2) 计算交割日（该合约 YYYY-MM 的第 10 个交易日） ---------------
+    # YYYY <- ifelse(!is.na(parsed$YY), 2000L + parsed$YY, NA_integer_)
+    # MM    <- ifelse(!is.na(parsed$MM) & parsed$MM >= 1 & parsed$MM <= 12, parsed$MM, NA_integer_)
+
+    # expiry_vec <- mapply(nth_trading_day, YYYY, MM, MoreArgs = list(n = 10L))
+    # expiry_vec <- as.Date(expiry_vec, origin = "1970-01-01")
+
+    # ## 3) DaysToExpiry：若当日 >= 交割日 → 0；否则计数 (当日, 交割日] 的交易日个数
+    # days_to_expiry <- mapply(function(d1, d2) {
+    #   if (is.na(d2)) return(NA_integer_)
+    #   if (!is.na(d1) && d1 >= d2) return(0L)
+    #   sum(td_all$交易日 > d1 & td_all$交易日 <= d2)
+    # }, df_all$交易日期, expiry_vec)
+
+    # ## 4) 合并回 df_all ----------------------------------------------
+    # df_all$前缀      <- parsed$前缀
+    # df_all$YY        <- parsed$YY
+    # df_all$MM        <- MM
+    # df_all$YYYY      <- YYYY
+    # df_all$交割日    <- as.Date(expiry_vec)
+    # df_all$DaysToExpiry <- as.integer(days_to_expiry)
+
+
+expiry_date_cache = {}
+
+
+def compute_days_to_expiry(df):
+    expiry_dfs = [
+        pd.read_excel(f"InputDir/交易日期/{year}年交易日列表.xlsx").rename(
+            columns={"日期": "交易日期", "交易日": "交易日期"}
+        )
+        for year in range(2023, 2027)
+    ]
+    expiry_dfs = pd.concat(expiry_dfs)
+    expiry_dfs = canonicalize_datetime_column(expiry_dfs)
+
+    def get_expiry_date(contract_code):
+        match = re.search(r"(\d{2})(\d{2})", contract_code)
+        if match:
+            year = 2000 + int(match.group(1))
+            month = int(match.group(2))
+            if (year, month) in expiry_date_cache:
+                return expiry_date_cache[(year, month)]
+
+            target_month_trading_dates_list = (
+                expiry_dfs[
+                    (expiry_dfs["交易日期"].dt.year == year)
+                    & (expiry_dfs["交易日期"].dt.month == month)
+                ]["交易日期"]
+                .sort_values()
+                .tolist()
+            )
+            expiry_date_cache[(year, month)] = (
+                target_month_trading_dates_list[9]
+                if len(target_month_trading_dates_list) >= 10
+                else (
+                    target_month_trading_dates_list[-1]
+                    if target_month_trading_dates_list
+                    else None
+                )
+            )
+            return expiry_date_cache[(year, month)]
+        assert False
+
+    df["交割日"] = df["合约代码"].apply(get_expiry_date)
+
+    df["DaysToExpiry"] = df.apply(
+        lambda x: (
+            len(
+                expiry_dfs[
+                    (expiry_dfs["交易日期"] <= x["交割日"])
+                    & (expiry_dfs["交易日期"] > x["交易日期"])
+                ]
+            )
+        ),
+        axis=1,
+    )
+    # drop 交割日
+    df = df.drop(columns=["交割日"])
+    return df
+
 
 def prepoccess_data(df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False):
     df = to_numeric(df, ["开盘价", "收盘价", "成交量", "持仓量", "结算价", "前结算价"])
 
     df = df[~df["品种名称"].isin(EXCLUDE_SYMS)].copy()
     df = df.sort_values(["合约代码", "交易日期"])
-    df["DaysToExpiry"] = df.groupby("合约代码").cumcount(ascending=False)
+    df = canonicalize_datetime_column(df)
+    df = compute_days_to_expiry(df)
     df["前收盘价"] = df.groupby("合约代码")["收盘价"].shift(1)
 
     # delete row with any item is NA
@@ -176,8 +275,6 @@ def prepoccess_data(df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False):
     )
     # delete row with 开盘价 is 0
     df = df[df["开盘价"] != 0]
-
-    df = canonicalize_datetime_column(df)
 
     idx = df.groupby(["交易日期", "品种名称"])["成交量"].idxmax()
     df["IsMain"] = df.index.isin(idx).astype(int)
@@ -199,11 +296,12 @@ def prepoccess_data(df, EXCLUDE_SYMS={"多晶硅"}, only_keep_major=False):
 
 
 def update_predict_contract(df, cut_off_date):
-    predicted_date = df[df["交易日期"] > cut_off_date]["交易日期"].min()
+    predicted_date = df[df["交易日期"] == cut_off_date]
     # set the predicted contract list of the predicted date and IsMain is 1
-    predict_contract_list = df[
-        (df["交易日期"] == predicted_date) & (df["IsMain"] == 1)
-    ]["合约代码"].tolist()
+    predict_contract_list = predicted_date[predicted_date["IsMain"] == 1][
+        "合约代码"
+    ].tolist()
+    assert len(predict_contract_list) == 1
     df["IsPredicted"] = df["合约代码"].isin(predict_contract_list)
     return df
 

@@ -312,9 +312,9 @@ CONFIG = {
                 NumEffectiveDays(60),
                 HiEvent(),
                 LoEvent(),
-                MACDLine(12, 26),
-                MACDSignal(9),
-                MACDHist(),
+                # MACDLine(12, 26),
+                # MACDSignal(9),
+                MACDHist(12, 26, 9),
                 MACDHistNorm(),
                 MACDHistCrossEvent(),
                 BBandsUpper(20),
@@ -489,12 +489,15 @@ def main():
 
     parser.add_argument("--model_training", action="store_true", default=False)
     parser.add_argument("--factor_mining", action="store_true", default=False)
+    parser.add_argument("--debug", action="store_true", default=False)
 
     parser.add_argument("--factors", type=str, nargs="+", default=None)
 
     args = parser.parse_args()
 
     INPUT_PATH = args.input_path
+    IS_DEBUG = args.debug
+
     profit_var = pd.read_csv(INPUT_PATH, encoding="utf-8")
 
     factor_mining = args.factor_mining
@@ -517,21 +520,27 @@ def main():
         #     for date in trading_date_list:
         #         f.write(date.strftime("%Y-%m-%d") + "\n")
 
-        var_all = all_factor_compute(args.factors, var_all, var_name)
+        if args.factors:
+            var_all = all_factor_compute(args.factors, var_all, var_name)
 
         # create a csv file to store the predict result,which have three columns
         pred_rows_buffer = []
 
         for cut_off_date in global_var.trading_date_list:
-            var_cur = utils.update_predict_contract(var_all, cut_off_date)
-            var_cur = all_factor_compute(["predict"], var_cur, var_name)
-            var = utils.filter_contracts(var_cur, cut_off_date)
+            var = utils.filter_contracts(var_all, cut_off_date)
+            var = utils.update_predict_contract(var, cut_off_date)
+            var = all_factor_compute(["predict"], var, var_name)
+            var = var.sort_values(["交易日期", "合约代码"])
             if model_training:
-                # var.to_csv(f"Py_contract_totrain_pre.csv", index=False)
                 var.drop(
                     columns=global_var.drop_columns,
                     inplace=True,
                 )
+                if IS_DEBUG:
+                    var.to_csv(
+                        f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py_pre.csv",
+                        index=False,
+                    )
                 var = var.dropna(
                     subset=var.columns.difference(["UpDownNext", "ROCNext"])
                 ).loc[~np.isinf(var["ROCNext"])]
@@ -540,9 +549,15 @@ def main():
                     (var["交易日期"] == cut_off_date) & (var["IsPredicted"] == 1)
                 ]
                 var = var[var["交易日期"] != cut_off_date]
+                if not IS_DEBUG:
+                    var.to_csv(
+                        f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py_post.csv",
+                        index=False,
+                    )
+                # get the last 60% data of var to assign to var
+                var = var.iloc[-int(len(var) * 0.6) :]
 
-                # var.to_csv(f"Py_contract_totrain.csv", index=False)
-                xgb_model = model.run_walkforward(var)
+                xgb_model = model.run_walkforward(var, cut_off_date)
                 raw_preds, _ = model.predict(xgb_model, predict_element)
                 predict_res = (
                     "涨"
@@ -562,10 +577,12 @@ def main():
                     "P": raw_preds[0],
                 }
                 pred_rows_buffer.append(row)
+
         predict_result_df = pd.DataFrame(
             pred_rows_buffer, columns=["交易日期", "预测值", "实际值", "P"]
         )
-        predict_result_df.to_csv(f"{var_name}_predict_result.csv", index=False)
+        if IS_DEBUG:
+            predict_result_df.to_csv(f"{var_name}_predict_result.csv", index=False)
 
     if factor_mining:
         # 1. compute factor ic
