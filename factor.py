@@ -12,6 +12,7 @@ from enum import Enum
 from scipy.stats import spearmanr
 import ta
 import talib
+from typing import Optional
 from abc import ABC, abstractmethod
 
 
@@ -82,11 +83,14 @@ class BaseProcessor(ABC):
         df = self._canonicalize_factor_cal_df(df)
         return df
 
-    def _name_suffix(self):
+    def _name_extra(self):
         return ""
 
+    def _get_name_suffix(self):
+        return None
+
     def name(self):
-        return self.__class__.__name__ + self._name_suffix()
+        return self.__class__.__name__ + self._name_extra()
 
     @abstractmethod
     def compute(self):
@@ -100,13 +104,29 @@ class BaseProcessor(ABC):
 
 
 class BaseProcessorWithParam(BaseProcessor):
-    def __init__(self, *params_extra):
-        self.params = list(params_extra)
+    def __init__(
+        self,
+        params_extra: list[int] = [],
+        name_suffix: str = "",
+    ):
+        self.params = params_extra
+        self.name_suffix = name_suffix
         self.pop_idx = 0
         super().__init__()
 
-    def _name_suffix(self):
-        return f"_{'_'.join(str(k) for k in self.params)}"
+    def _name_extra(self):
+        name_series = map(
+            str,
+            (
+                (self.params + [self.name_suffix])
+                if self._get_name_suffix() != ""
+                else self.params
+            ),
+        )
+        return f"_{'_'.join(name_series)}"
+
+    def _get_name_suffix(self):
+        return self.name_suffix
 
     def _get_param(self):
         assert self.pop_idx < len(self.params), "No more parameters to pop"
@@ -831,7 +851,8 @@ class Beta(AggregateProcessorWithParam):
         df, _ = self.dfs
         beta_window = self._pop_param()
         beta_min_window = self._pop_param()
-        category = self._pop_param()
+
+        category = self._get_name_suffix()
 
         tmp = df.groupby("交易日期").apply(
             lambda x: pd.Series(
@@ -868,7 +889,7 @@ class Beta(AggregateProcessorWithParam):
 class ExRet60(BaseProcessorWithParam):
     def compute(self):
         df, _ = self.dfs
-        category = self._pop_param()
+        category = self._get_name_suffix()
         beta_sector = df[f"Beta_60_40_{category}"]
         return (
             df["RelativeToMainLogDiff"]

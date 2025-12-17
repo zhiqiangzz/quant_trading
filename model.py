@@ -173,7 +173,7 @@ data_order = [
 
 # ==================== 主逻辑 ======================
 def run_walkforward(
-    train_set: pd.DataFrame, cut_off_date: pd.Timestamp, IS_DEBUG: bool = False
+    train_set: pd.DataFrame, cut_off_date: pd.Timestamp, is_debug: bool = False
 ):
     feat_cols = [
         c
@@ -220,7 +220,7 @@ def run_walkforward(
     y_full = label
     w_full = w_train
 
-    if IS_DEBUG:
+    if is_debug:
         dump_py2train = train_set_kept.copy()
         dump_py2train["label"] = y_full
         dump_py2train["weight"] = w_full
@@ -290,7 +290,17 @@ def run_walkforward(
     return model
 
 
-def predict(xgb_model, predict_element: pd.DataFrame):
+def predict(
+    xgb_model,
+    predict_element: pd.DataFrame,
+    cut_off_date: pd.Timestamp = None,
+    is_debug: bool = False,
+):
+    if is_debug and cut_off_date is not None:
+        predict_element.to_csv(
+            f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py2pred.csv", index=False
+        )
+
     raw_preds = xgb_model.predict(
         xgb.DMatrix(predict_element[data_order].to_numpy(dtype=float))
     )

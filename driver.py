@@ -22,40 +22,40 @@ CONFIG = {
         "correlation": {
             "files": {
                 "碳酸锂": ["商品关联指数/电池931719.CSI.xlsx"],
-                # "工业硅": ["商品关联指数/光伏931151.CSI.xlsx"],
-                # "沪镍": ["商品关联指数/有色801050.SI.xlsx"],
-                # "沪锡": ["商品关联指数/有色801050.SI.xlsx"],
-                # "沪铜": ["商品关联指数/有色801050.SI.xlsx"],
-                # "沪银": ["商品关联指数/贵金属801053.SI.xlsx"],
-                # "螺纹钢": ["商品关联指数/钢铁801040.SI.xlsx"],
-                # "氧化铝": ["商品关联指数/有色801050.SI.xlsx"],
-                # "橡胶": ["商品关联指数/化工801030.SI.xlsx"],
-                # "纯碱": ["商品关联指数/化工801030.SI.xlsx"],
-                # "烧碱": ["商品关联指数/化工801030.SI.xlsx"],
-                # "玻璃": [
-                #     "商品关联指数/建筑材料801710.SI.xlsx",
-                # ],
-                # "甲醇": ["商品关联指数/化工801030.SI.xlsx"],
-                # "精对苯二甲酸": [
-                #     "商品关联指数/化学纤维801032.SI.xlsx",
-                # ],
-                # "铁矿石": [
-                #     "商品关联指数/钢铁801040.SI.xlsx",
-                # ],
-                # "豆粕": ["商品关联指数/饲料801014.SI.xlsx"],
-                # "棕榈油": [
-                #     "商品关联指数/农产品801012.SI.xlsx",
-                # ],
-                # "焦煤": [
-                #     "商品关联指数/煤炭000820.CSI.xlsx",
-                # ],
+                "工业硅": ["商品关联指数/光伏931151.CSI.xlsx"],
+                "沪镍": ["商品关联指数/有色801050.SI.xlsx"],
+                "沪锡": ["商品关联指数/有色801050.SI.xlsx"],
+                "沪铜": ["商品关联指数/有色801050.SI.xlsx"],
+                "沪银": ["商品关联指数/贵金属801053.SI.xlsx"],
+                "螺纹钢": ["商品关联指数/钢铁801040.SI.xlsx"],
+                "氧化铝": ["商品关联指数/有色801050.SI.xlsx"],
+                "橡胶": ["商品关联指数/化工801030.SI.xlsx"],
+                "纯碱": ["商品关联指数/化工801030.SI.xlsx"],
+                "烧碱": ["商品关联指数/化工801030.SI.xlsx"],
+                "玻璃": [
+                    "商品关联指数/建筑材料801710.SI.xlsx",
+                ],
+                "甲醇": ["商品关联指数/化工801030.SI.xlsx"],
+                "精对苯二甲酸": [
+                    "商品关联指数/化学纤维801032.SI.xlsx",
+                ],
+                "铁矿石": [
+                    "商品关联指数/钢铁801040.SI.xlsx",
+                ],
+                "豆粕": ["商品关联指数/饲料801014.SI.xlsx"],
+                "棕榈油": [
+                    "商品关联指数/农产品801012.SI.xlsx",
+                ],
+                "焦煤": [
+                    "商品关联指数/煤炭000820.CSI.xlsx",
+                ],
             },
             "factors": [
                 # LogReturn(1),
-                LogReturnStockIndex(0, "correlation"),
-                LogReturnStockIndex(3, "correlation"),
-                Beta(60, 40, "correlation"),
-                ExRet60("correlation"),
+                LogReturnStockIndex([0], "correlation"),
+                LogReturnStockIndex([3], "correlation"),
+                Beta([60, 40], "correlation"),
+                ExRet60(name_suffix="correlation"),
                 # LogReturn(5),
                 # Beta(),
             ],
@@ -95,10 +95,10 @@ CONFIG = {
             },
             "factors": [
                 # LogReturn(1),
-                LogReturnStockIndex(0, "category"),
-                LogReturnStockIndex(3, "category"),
-                Beta(60, 40, "category"),
-                ExRet60("category"),
+                LogReturnStockIndex([0], "category"),
+                LogReturnStockIndex([3], "category"),
+                Beta([60, 40], "category"),
+                ExRet60(name_suffix="category"),
                 # LogReturn(5),
                 # Beta(),
             ],
@@ -248,14 +248,14 @@ CONFIG = {
                 "碳酸锂": ["机构净持仓/[碳酸锂 LC]_净持仓合计_wide.xlsx"],
             },
             "factors": [
-                TopNet(20),
-                TopTotal(20),
-                TopNet(5),
-                TopTotal(5),
-                DomTop(20),
-                SkewTop(20),
-                DNetAtrTop(5, 1),
-                DNetAtrTop(20, 5),
+                TopNet([20]),
+                TopTotal([20]),
+                TopNet([5]),
+                TopTotal([5]),
+                DomTop([20]),
+                SkewTop([20]),
+                DNetAtrTop([5, 1]),
+                DNetAtrTop([20, 5]),
             ],
         },
     },
@@ -290,53 +290,53 @@ CONFIG = {
                 LastDayClosePrice(),
                 OISum(),
                 AggAtr(),
-                ROC(0),
+                ROC([0]),
                 ROCNext(),
                 RGap(),
                 RangeLnHL(),
                 CLV(),
                 DLogVol(),
-                ATR(14),
-                ATRRelative(14),
-                DEVLogVol(7),
-                EMA(7),
-                EMA(12),
-                EMA(26),
-                EMA(9),
-                EMA(21),
-                DEVEma(7),
-                Slope(7, 14),
-                Spread(7, 21),
-                DEVEmaQuantile(60, 80),
-                DEVEmaQuantile(60, 20),
-                NumEffectiveDays(60),
+                ATR([14]),
+                ATRRelative([14]),
+                DEVLogVol([7]),
+                EMA([7]),
+                EMA([12]),
+                EMA([26]),
+                EMA([9]),
+                EMA([21]),
+                DEVEma([7]),
+                Slope([7, 14]),
+                Spread([7, 21]),
+                DEVEmaQuantile([60, 80]),
+                DEVEmaQuantile([60, 20]),
+                NumEffectiveDays([60]),
                 HiEvent(),
                 LoEvent(),
                 # MACDLine(12, 26),
                 # MACDSignal(9),
-                MACDHist(12, 26, 9),
+                MACDHist([12, 26, 9]),
                 MACDHistNorm(),
                 MACDHistCrossEvent(),
-                BBandsUpper(20),
-                BBandsMiddle(20),
-                BBandsLower(20),
+                BBandsUpper([20]),
+                BBandsMiddle([20]),
+                BBandsLower([20]),
                 BBandsWidth(),
                 BBandsPercentB(),
                 BBandsWidthRelative(),
                 BBandsBreakHigh(),
                 BBandsBreakLow(),
-                ADX(14),
-                RSI(14),
+                ADX([14]),
+                RSI([14]),
                 RSICenter(),
                 RSIHiEvent(),
                 RSILoEvent(),
-                HV(15, 10),
+                HV([15, 10]),
                 d_HV(),
-                ChaikinVolatility(10),
-                OBVFlow(7),
-                Mom(10),
+                ChaikinVolatility([10]),
+                OBVFlow([7]),
+                Mom([10]),
                 RngRel(),
-                RngMean(10),
+                RngMean([10]),
                 DRngMean(),
                 UpDownNext(),
                 RelativeToMainLogDiff(),
@@ -375,11 +375,7 @@ def expand_weekly_data_to_daily(weekly_df):
     return expanded_df
 
 
-def factor_compute(func: BaseProcessor, var: pd.DataFrame, var_name: str, files: dict):
-    args = [None]
-    if files:
-        args.extend([pd.read_excel(f"InputDir/{file}") for file in files[var_name]])
-
+def factor_compute(func: BaseProcessor, var: pd.DataFrame, args: list):
     new_factor_cal_df = pd.DataFrame(
         columns=["合约代码", "交易日期", "factor_placeholder"]
     )
@@ -459,11 +455,16 @@ def all_factor_compute(factors: list[str], var_all: pd.DataFrame, var_name: str)
         ].items():
             for factor_func in factor_subcategory["factors"]:
                 factor_name = factor_func.name()
+                args = [None]
+                files = factor_subcategory.get("files")
+                if files:
+                    args.extend(
+                        [pd.read_excel(f"InputDir/{file}") for file in files[var_name]]
+                    )
                 new_factor_cal_df = factor_compute(
                     factor_func,
                     var_all,
-                    var_name,
-                    factor_subcategory.get("files"),
+                    args,
                 )
                 identity = factor_name
                 new_factor_cal_df = new_factor_cal_df.rename(
@@ -476,6 +477,50 @@ def all_factor_compute(factors: list[str], var_all: pd.DataFrame, var_name: str)
                     how="outer",
                 )
     return var_all
+
+
+def ts_ic_rolling(dates, vals_f, vals_r, win=50):
+
+    out = []
+    if len(dates) < win:
+        return pd.DataFrame(columns=["开始日期", "结束日期", "N", "IC", "p"])
+
+    for i in range(win - 1, len(dates)):
+        f_win = vals_f[i - win + 1 : i + 1]
+        r_win = vals_r[i - win + 1 : i + 1]
+        # Spearman
+        rho, pval = spearmanr(f_win, r_win, nan_policy="omit")
+
+        out.append(
+            {
+                "开始日期": dates[i - win + 1],
+                "结束日期": dates[i],
+                "Days": len(f_win[np.isfinite(f_win) & np.isfinite(r_win)]),
+                "IC": rho,
+                "P": pval,
+            }
+        )
+    return pd.DataFrame(out)
+
+
+def ts_ic_compute(factors: list[str], var_all: pd.DataFrame, var_name: str):
+    for factor_category in factors:
+        for factor_subcategory_name, factor_subcategory in CONFIG[
+            factor_category
+        ].items():
+            for factor_func in factor_subcategory["factors"]:
+                factor_name = factor_func.name()
+                var_date_factor_rocnext = (
+                    var_all[["交易日期", factor_name, "ROCNext"]]
+                    .dropna()
+                    .reset_index(drop=True)
+                )
+                ts_ic_rolling_result = ts_ic_rolling(
+                    var_date_factor_rocnext["交易日期"],
+                    var_date_factor_rocnext[factor_name],
+                    var_date_factor_rocnext["ROCNext"],
+                )
+                print(ts_ic_rolling_result)
 
 
 def main():
@@ -503,16 +548,16 @@ def main():
     factor_mining = args.factor_mining
     model_training = args.model_training
 
-    cut_off_date = pd.to_datetime("2025-01-03")
-
     major = utils.prepoccess_data(profit_var, only_keep_major=factor_mining)
 
     grouped = major.groupby("品种名称")
 
+    all_var_factors = None
+
     for var_name in args.vars:
         var_indices = grouped.groups[var_name]
-        var_all = major.loc[var_indices].copy().reset_index(drop=True)
-        var_all = var_all.sort_values(["交易日期", "合约代码"])
+        var_current_data = major.loc[var_indices].copy().reset_index(drop=True)
+        var_current_data = var_current_data.sort_values(["交易日期", "合约代码"])
         # var_all.to_csv(f"InputDir/{var_name}_raw_df.csv", index=False)
         # trading_date_list = var_all["交易日期"].unique().tolist()
         # # dump to a txt file
@@ -521,17 +566,27 @@ def main():
         #         f.write(date.strftime("%Y-%m-%d") + "\n")
 
         if args.factors:
-            var_all = all_factor_compute(args.factors, var_all, var_name)
+            var_current_data = all_factor_compute(
+                args.factors, var_current_data, var_name
+            )
+            all_var_factors = (
+                pd.concat([all_var_factors, var_current_data], axis=0)
+                if all_var_factors is not None
+                else var_current_data.copy()
+            )
 
         # create a csv file to store the predict result,which have three columns
         pred_rows_buffer = []
 
-        for cut_off_date in global_var.trading_date_list:
-            var = utils.filter_contracts(var_all, cut_off_date)
-            var = utils.update_predict_contract(var, cut_off_date)
-            var = all_factor_compute(["predict"], var, var_name)
-            var = var.sort_values(["交易日期", "合约代码"])
-            if model_training:
+        if factor_mining:
+            ts_ic_compute(args.factors, var_current_data, var_name)
+
+        if model_training:
+            for cut_off_date in global_var.trading_date_list:
+                var = utils.filter_contracts(var_current_data, cut_off_date)
+                var = utils.update_predict_contract(var, cut_off_date)
+                var = all_factor_compute(["predict"], var, var_name)
+                var = var.sort_values(["交易日期", "合约代码"])
                 var.drop(
                     columns=global_var.drop_columns,
                     inplace=True,
@@ -557,8 +612,10 @@ def main():
                 # get the last 60% data of var to assign to var
                 var = var.iloc[-int(len(var) * 0.6) :]
 
-                xgb_model = model.run_walkforward(var, cut_off_date)
-                raw_preds, _ = model.predict(xgb_model, predict_element)
+                xgb_model = model.run_walkforward(var, cut_off_date, IS_DEBUG)
+                raw_preds, _ = model.predict(
+                    xgb_model, predict_element, cut_off_date, IS_DEBUG
+                )
                 predict_res = (
                     "涨"
                     if raw_preds > global_var.UP_TH
@@ -578,11 +635,11 @@ def main():
                 }
                 pred_rows_buffer.append(row)
 
-        predict_result_df = pd.DataFrame(
-            pred_rows_buffer, columns=["交易日期", "预测值", "实际值", "P"]
-        )
-        if IS_DEBUG:
-            predict_result_df.to_csv(f"{var_name}_predict_result.csv", index=False)
+            predict_result_df = pd.DataFrame(
+                pred_rows_buffer, columns=["交易日期", "预测值", "实际值", "P"]
+            )
+            if IS_DEBUG:
+                predict_result_df.to_csv(f"{var_name}_predict_result.csv", index=False)
 
     if factor_mining:
         # 1. compute factor ic
