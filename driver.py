@@ -593,7 +593,7 @@ def main():
                 )
                 if IS_DEBUG:
                     var.to_csv(
-                        f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py_pre.csv",
+                        f"{global_var.model_debug_dir}/{cut_off_date.strftime('%Y-%m-%d')}py_pre.csv",
                         index=False,
                     )
                 var = var.dropna(
@@ -606,7 +606,7 @@ def main():
                 var = var[var["交易日期"] != cut_off_date]
                 if not IS_DEBUG:
                     var.to_csv(
-                        f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py_post.csv",
+                        f"{global_var.model_debug_dir}/{cut_off_date.strftime('%Y-%m-%d')}py_post.csv",
                         index=False,
                     )
                 # get the last 60% data of var to assign to var

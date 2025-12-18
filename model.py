@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+from global_var import model_debug_dir, mapping_py2r, feature_cols
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
@@ -129,68 +130,11 @@ def compute_weights(
     return w
 
 
-data_order = [
-    "ROC_0",
-    "RGap",
-    "RangeLnHL",
-    "CLV",
-    "DLogVol",
-    "ATRRelative_14",
-    "DEVLogVol_7",
-    "DEVEma_7",
-    "Slope_7_14",
-    "Spread_7_21",
-    "HiEvent",
-    "MACDHistNorm",
-    "MACDHistCrossEvent",
-    "BBandsPercentB",
-    "BBandsWidthRelative",
-    "BBandsBreakHigh",
-    "ADX_14",
-    "RSICenter",
-    "RSIHiEvent",
-    "HV_15_10",
-    "d_HV",
-    "ChaikinVolatility_10",
-    "OBVFlow_7",
-    "Mom_10",
-    "RngMean_10",
-    "DRngMean",
-    "DomTop_20",
-    "SkewTop_20",
-    "DNetAtrTop_5_1",
-    "DNetAtrTop_20_5",
-    "LogReturnStockIndex_3_category",
-    "LogReturnStockIndex_3_correlation",
-    "Beta_60_40_category",
-    "ExRet60_category",
-    "Beta_60_40_correlation",
-    "ExRet60_correlation",
-    "BasisRate",
-    "DaysToExpiry",
-]
-
-
 # ==================== 主逻辑 ======================
 def run_walkforward(
     train_set: pd.DataFrame, cut_off_date: pd.Timestamp, is_debug: bool = False
 ):
-    feat_cols = [
-        c
-        for c in train_set.columns
-        if c
-        not in [
-            "交易日期",
-            "合约代码",
-            "品种名称",
-            "ROCNext",
-            "IsPredicted",
-            "DiffAbsAtr",
-            "UpDownNext",
-        ]
-    ]
 
-    train_feature_col = data_order
     # 1. 数据准备
     eps = estimate_eps(train_set["ROCNext"], train_set["ATRRelative_14"])
     label = make_labels_with_deadzone(train_set["ROCNext"], eps)
@@ -214,7 +158,7 @@ def run_walkforward(
 
     # --- 修改开始 ---
 
-    train_set_kept_feat = train_set_kept[train_feature_col]
+    train_set_kept_feat = train_set_kept[feature_cols]
     X_full = train_set_kept_feat.to_numpy(dtype=float)
 
     y_full = label
@@ -225,7 +169,8 @@ def run_walkforward(
         dump_py2train["label"] = y_full
         dump_py2train["weight"] = w_full
         dump_py2train.to_csv(
-            f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py2train.csv", index=False
+            f"{model_debug_dir}/{cut_off_date.strftime('%Y-%m-%d')}py2train.csv",
+            index=False,
         )
 
     # 【关键修改点 1】：直接使用全量数据构建 dtrain
@@ -296,13 +241,15 @@ def predict(
     cut_off_date: pd.Timestamp = None,
     is_debug: bool = False,
 ):
+
     if is_debug and cut_off_date is not None:
         predict_element.to_csv(
-            f"py_comp_r/{cut_off_date.strftime('%Y-%m-%d')}py2pred.csv", index=False
+            f"{model_debug_dir}/{cut_off_date.strftime('%Y-%m-%d')}py2pred.csv",
+            index=False,
         )
 
     raw_preds = xgb_model.predict(
-        xgb.DMatrix(predict_element[data_order].to_numpy(dtype=float))
+        xgb.DMatrix(predict_element[feature_cols].to_numpy(dtype=float))
     )
     final_preds = xgb_model.iso_calibrator.predict(raw_preds)
     return raw_preds, final_preds

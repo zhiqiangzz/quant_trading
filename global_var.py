@@ -172,3 +172,62 @@ drop_columns = [
     "前收盘价",
     "MACDHist_12_26_9",
 ]
+
+feature_mapping_py2r = {
+    "ROC_0": "r_oc",
+    "RGap": "r_gap",
+    "RangeLnHL": "range_lnHL",
+    "CLV": "CLV",
+    "DLogVol": "d_logVol",
+    "ATRRelative_14": "ATR14_rel",
+    "DEVLogVol_7": "dev_logVol",
+    "DEVEma_7": "dev_ema7",
+    "Slope_7_14": "slope_ema7",
+    "Spread_7_21": "spread_7_21",
+    "HiEvent": "hi_event",
+    "MACDHistNorm": "MACD_hist_norm",
+    "MACDHistCrossEvent": "macd_cross_event",
+    "BBandsPercentB": "BB_pctB",
+    "BBandsWidthRelative": "BB_width_rel",
+    "BBandsBreakHigh": "bb_break_high",
+    "ADX_14": "ADX_14",
+    "RSICenter": "RSI_center",
+    "RSIHiEvent": "rsi_hi_event",
+    "HV_15_10": "HV_15",
+    "d_HV": "d_HV_15",
+    "ChaikinVolatility_10": "Chaikin_Volatility",
+    "OBVFlow_7": "OBV_flow",
+    "Mom_10": "mom10",
+    "RngMean_10": "rng10_mean",
+    "DRngMean": "d_rng10_mean",
+    "DomTop_20": "Dom_top20",
+    "SkewTop_20": "Skew_top20",
+    "DNetAtrTop_5_1": "d1Net_ATR_top5",
+    "DNetAtrTop_20_5": "d5Net_ATR_top20",
+    "LogReturnStockIndex_3_category": "S_ret_lag3",
+    "LogReturnStockIndex_3_correlation": "E_ret_lag3",
+    "Beta_60_40_category": "Beta_Sector",
+    "ExRet60_category": "ExRet_Sector60",
+    "Beta_60_40_correlation": "Beta_Equity",
+    "ExRet60_correlation": "ExRet_Equity60",
+    "BasisRate": "基差率",
+    "DaysToExpiry": "DaysToExpiry",
+}
+
+other_mapping_py2r = {
+    "UpDownNext": "up_dn_next",
+    "ROCNext": "r_oc_next",
+    "DiffAbsAtr": "diff_abs_atr",
+    "IsPredicted": "IsMain",
+    "label": "label",
+    "weight": "weight",
+}
+
+
+mapping_py2r = {**feature_mapping_py2r, **other_mapping_py2r}
+
+mapping_r2py = {v: k for k, v in mapping_py2r.items()}
+
+model_debug_dir = "model_debug"
+
+feature_cols = [x for x in feature_mapping_py2r.keys()]
