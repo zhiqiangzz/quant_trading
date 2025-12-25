@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+import itertools
+from dataclasses import dataclass, field
+from typing import List
 from global_var import model_debug_dir, mapping_py2r, feature_cols
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
@@ -22,6 +25,47 @@ PLATT_FALLBACK = True
 PLATT_L2 = 1.0
 P_EPS = 1e-4
 TIME_HALFLIFE = 30
+
+
+@dataclass
+class ModelParams:
+    eta: List[float] = field(default_factory=lambda: [0.03])
+    max_depth: List[int] = field(default_factory=lambda: [4])
+    min_child_weight: List[int] = field(default_factory=lambda: [5])
+    subsample: List[float] = field(default_factory=lambda: [0.75])
+    colsample_bytree: List[float] = field(default_factory=lambda: [0.75])
+    lambda_: List[float] = field(default_factory=lambda: [5])
+    alpha: List[float] = field(default_factory=lambda: [1])
+    seed: List[int] = field(
+        default_factory=lambda: [
+            1,
+            11,
+            111,
+            1111,
+            2024,
+            3333,
+            4444,
+            5555,
+            6666,
+            7777,
+            8888,
+            9999,
+        ]
+    )
+    boost_round: List[int] = field(default_factory=lambda: [15000])
+
+    def get_product_params(self):
+        return itertools.product(
+            self.eta,
+            self.max_depth,
+            self.min_child_weight,
+            self.subsample,
+            self.colsample_bytree,
+            self.lambda_,
+            self.alpha,
+            self.seed,
+            self.boost_round,
+        )
 
 
 # ==================== 工具函数 ======================
@@ -185,58 +229,75 @@ def run_walkforward(
     else:
         spw_all = 1
 
-    params = {
-        "objective": "binary:logistic",
-        "eval_metric": "logloss",
-        "eta": 0.05,
-        "max_depth": 4,
-        "min_child_weight": 5,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "lambda": 2,
-        "alpha": 1,
-        "scale_pos_weight": spw_all,
-        "seed": 1031,
-    }
+    models = []
+    hyper_params = ModelParams()
 
-    model = xgb.train(
-        params,
-        dtrain,
-        num_boost_round=10000,
-        evals=[(dtrain, "train")],
-        verbose_eval=False,  # 对应 R 中的 verbose = 0
-        early_stopping_rounds=100,
-    )
+    for (
+        eta_,
+        max_depth_,
+        min_child_weight_,
+        subsample_,
+        colsample_bytree_,
+        lambda_,
+        alpha_,
+        seed_,
+        boost_round_,
+    ) in hyper_params.get_product_params():
 
-    m_win = len(X_full)
+        params = {
+            "objective": "binary:logistic",
+            "eval_metric": "logloss",
+            "eta": eta_,
+            "max_depth": max_depth_,
+            "min_child_weight": min_child_weight_,
+            "subsample": subsample_,
+            "colsample_bytree": colsample_bytree_,
+            "lambda": lambda_,
+            "alpha": alpha_,
+            "scale_pos_weight": spw_all,
+            "seed": seed_,
+        }
 
-    if m_win >= 50:
-        val_n = max(20, int(0.2 * m_win))
-
-        X_calib = X_full[-val_n:]
-        y_calib = y_full[-val_n:]
-
-        dcalib = xgb.DMatrix(X_calib)
-        p_val_raw = model.predict(dcalib)
-
-        iso_reg = IsotonicRegression(
-            y_min=0, y_max=1, out_of_bounds="clip", increasing=True
+        model = xgb.train(
+            params,
+            dtrain,
+            num_boost_round=boost_round_,
+            evals=[(dtrain, "train")],
+            verbose_eval=False,  # 对应 R 中的 verbose = 0
+            early_stopping_rounds=100,
         )
 
-        try:
-            iso_reg.fit(p_val_raw, y_calib)
-            model.iso_calibrator = iso_reg
-        except Exception as e:
-            print(f"Isotonic Regression failed: {e}")
-            model.iso_calibrator = None
-    else:
-        model.iso_calibrator = None
+        m_win = len(X_full)
 
-    return model
+        if m_win >= 50:
+            val_n = max(20, int(0.2 * m_win))
+
+            X_calib = X_full[-val_n:]
+            y_calib = y_full[-val_n:]
+
+            dcalib = xgb.DMatrix(X_calib)
+            p_val_raw = model.predict(dcalib)
+
+            iso_reg = IsotonicRegression(
+                y_min=0, y_max=1, out_of_bounds="clip", increasing=True
+            )
+
+            try:
+                iso_reg.fit(p_val_raw, y_calib)
+                model.iso_calibrator = iso_reg
+            except Exception as e:
+                print(f"Isotonic Regression failed: {e}")
+                model.iso_calibrator = None
+        else:
+            model.iso_calibrator = None
+
+        models.append(model)
+
+    return models
 
 
 def predict(
-    xgb_model,
+    xgb_models: List[xgb.Booster],
     predict_element: pd.DataFrame,
     cut_off_date: pd.Timestamp = None,
     is_debug: bool = False,
@@ -248,8 +309,18 @@ def predict(
             index=False,
         )
 
-    raw_preds = xgb_model.predict(
-        xgb.DMatrix(predict_element[feature_cols].to_numpy(dtype=float))
+    raw_preds = (
+        [
+            xgb_model.predict(
+                xgb.DMatrix(predict_element[feature_cols].to_numpy(dtype=float))
+            )[0]
+            for xgb_model in xgb_models
+        ],
     )
-    final_preds = xgb_model.iso_calibrator.predict(raw_preds)
-    return raw_preds, final_preds
+
+    final_preds = [
+        xgb_model.iso_calibrator.predict(raw_pred)[0]
+        for xgb_model, raw_pred in zip(xgb_models, raw_preds)
+    ]
+
+    return np.mean(raw_preds), np.mean(final_preds)

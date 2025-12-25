@@ -2,10 +2,10 @@ import pandas as pd
 import argparse as arg
 
 parser = arg.ArgumentParser()
-parser.add_argument("--file", type=str, default="碳酸锂_predict_result.csv")
+parser.add_argument("--file", type=str, default="碳酸锂_predict_result.xlsx")
 args = parser.parse_args()
 
-df = pd.read_csv(args.file)
+df = pd.read_excel(args.file)
 
 # if 预测值 or 实际值 is 无, then drop the row
 df = df[df["预测值"] != "无"]

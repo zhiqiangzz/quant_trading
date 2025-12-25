@@ -604,7 +604,7 @@ def main():
                     (var["交易日期"] == cut_off_date) & (var["IsPredicted"] == 1)
                 ]
                 var = var[var["交易日期"] != cut_off_date]
-                if not IS_DEBUG:
+                if IS_DEBUG:
                     var.to_csv(
                         f"{global_var.model_debug_dir}/{cut_off_date.strftime('%Y-%m-%d')}py_post.csv",
                         index=False,
@@ -612,9 +612,9 @@ def main():
                 # get the last 60% data of var to assign to var
                 var = var.iloc[-int(len(var) * 0.6) :]
 
-                xgb_model = model.run_walkforward(var, cut_off_date, IS_DEBUG)
+                xgb_models = model.run_walkforward(var, cut_off_date, IS_DEBUG)
                 raw_preds, _ = model.predict(
-                    xgb_model, predict_element, cut_off_date, IS_DEBUG
+                    xgb_models, predict_element, cut_off_date, IS_DEBUG
                 )
                 predict_res = (
                     "涨"
@@ -631,15 +631,14 @@ def main():
                     "交易日期": cut_off_date,
                     "预测值": predict_res,
                     "实际值": actual_value,
-                    "P": raw_preds[0],
+                    "P": raw_preds,
                 }
                 pred_rows_buffer.append(row)
 
             predict_result_df = pd.DataFrame(
                 pred_rows_buffer, columns=["交易日期", "预测值", "实际值", "P"]
             )
-            if IS_DEBUG:
-                predict_result_df.to_csv(f"{var_name}_predict_result.csv", index=False)
+            predict_result_df.to_csv(f"{var_name}_predict_result.csv", index=False)
 
     if factor_mining:
         # 1. compute factor ic

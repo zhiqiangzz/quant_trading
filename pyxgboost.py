@@ -24,20 +24,31 @@ V = verify_data[feature_cols]
 # print(V)
 
 # train_rounds = [2500, 5000, 10000, 20000, 30000]
-# seeds = [1, 11, 111, 1111, 2024, 3333, 4444, 5555, 6666, 7777, 8888, 9999]
-# drop_rows = [0, 1, 2, 3, 4, 5]
+seeds = [1, 11, 111, 1111, 2024, 3333, 4444, 5555, 6666, 7777, 8888, 9999]
+# process_rows = [0, 1, 2, 3, 4, 5]
+# scale_rows = [0, 3, 5, 7, 9, 11, 13, 15, 17, 19]
 # etas = [0.03, 0.05, 0.08, 0.1, 0.2]
 
-train_rounds = [10000]
-seeds = [1031]
-process_rows = [0, 1]
-drop_rows = [0]
-etas = [0.05]
+train_rounds = [15000]
+# seeds = [1031, 2222]
+process_rows = [0]
+scale_rows = [0]
+shuffle_rows = [0]
+etas = [0.03]
+lambdas = [5]
 
 result_buffer = []
 # Cartesian product of train_round and seed
-for train_round, seed, process_row, drop_row, eta in itertools.product(
-    train_rounds, seeds, process_rows, drop_rows, etas
+for (
+    train_round,
+    seed,
+    shuffle_row,
+    scale_row,
+    drop_row,
+    eta,
+    lambda_,
+) in itertools.product(
+    train_rounds, seeds, shuffle_rows, scale_rows, process_rows, etas, lambdas
 ):
 
     X_local = X.copy()
@@ -49,9 +60,21 @@ for train_round, seed, process_row, drop_row, eta in itertools.product(
         y_local.drop(y_local.index[:drop_row], inplace=True)
         w_local.drop(w_local.index[:drop_row], inplace=True)
 
-    if process_row > 0:
-        X_local.loc[X_local.index[:process_row], "ROC_0"] *= 2
-        # w_local[:process_row] *= 0.00000000001
+    if scale_row > 0:
+        # X_local.loc[X_local.index[:scale_row], "ROC_0"] *= 2
+        w_local[:scale_row] *= 0.9
+
+    if shuffle_row > 0:
+        # shuffle the front shuffle_row rows
+        X_local.iloc[:shuffle_row] = (
+            X_local.iloc[:shuffle_row].sample(frac=1).reset_index(drop=True)
+        )
+        y_local.iloc[:shuffle_row] = (
+            y_local.iloc[:shuffle_row].sample(frac=1).reset_index(drop=True)
+        )
+        w_local.iloc[:shuffle_row] = (
+            w_local.iloc[:shuffle_row].sample(frac=1).reset_index(drop=True)
+        )
 
     pos_w_all = w_local[y_local == 1].sum()
     neg_w_all = w_local[y_local == 0].sum()
@@ -70,9 +93,9 @@ for train_round, seed, process_row, drop_row, eta in itertools.product(
         "eta": eta,
         "max_depth": 4,
         "min_child_weight": 5,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "lambda": 2,
+        "subsample": 0.75,
+        "colsample_bytree": 0.75,
+        "lambda": lambda_,
         "alpha": 1,
         "scale_pos_weight": spw_all,
         "seed": seed,
@@ -95,25 +118,31 @@ for train_round, seed, process_row, drop_row, eta in itertools.product(
         train_round,
         "seed: ",
         seed,
+        "shuffle_rows: ",
+        shuffle_row,
         "drop_rows: ",
         drop_row,
         "best_iter: ",
         model.best_iteration,
         "process_rows: ",
-        process_row,
-        "verify_preds: ",
-        verify_preds,
+        scale_row,
         "eta: ",
         eta,
+        "lambda: ",
+        lambda_,
+        "verify_preds: ",
+        verify_preds,
     )
     result_buffer.append(
         {
             "train_round": train_round,
             "seed": seed,
             "best_iter": model.best_iteration,
+            "shuffle_rows": shuffle_row,
             "drop_rows": drop_row,
-            "process_rows": process_row,
+            "process_rows": scale_row,
             "eta": eta,
+            "lambda": lambda_,
             "verify_preds": verify_preds[0],
         }
     )
@@ -124,9 +153,11 @@ dump_xlsx = pd.DataFrame(
         "train_round",
         "seed",
         "best_iter",
+        "shuffle_rows",
         "drop_rows",
         "process_rows",
         "eta",
+        "lambda",
         "verify_preds",
     ],
 )
